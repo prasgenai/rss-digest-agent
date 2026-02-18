@@ -165,6 +165,25 @@ docker run --env-file .env rss-digest-agent
 
 ---
 
+## Full Article Scraping
+
+When enabled, the agent fetches the full article text from each relevant article's URL instead of relying on the truncated RSS excerpt. This produces richer, more accurate summaries.
+
+Configure in `config.yaml`:
+
+```yaml
+scraping:
+  enabled: true          # set to false to use RSS excerpts only (faster runs)
+  max_chars: 2000        # maximum characters used from scraped content
+  timeout_seconds: 10    # page load timeout in seconds
+```
+
+- Scraping runs **after** AI filtering — only relevant articles are scraped
+- If a site blocks scraping or times out, the agent silently falls back to the RSS excerpt
+- Set `enabled: false` for faster runs or if you hit many paywalled sources
+
+---
+
 ## Article Cache
 
 The agent maintains a local SQLite cache (`digest_cache.db`) to avoid re-processing articles it has already seen.
