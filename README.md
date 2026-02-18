@@ -165,6 +165,23 @@ docker run --env-file .env rss-digest-agent
 
 ---
 
+## Article Cache
+
+The agent maintains a local SQLite cache (`digest_cache.db`) to avoid re-processing articles it has already seen.
+
+- Created automatically on first run — no setup needed
+- Stores article URLs with the date they were first processed
+- Expiry period configurable in `config.yaml` under `cache.expiry_days` (default: 7 days)
+- Expired entries are purged automatically on each run
+- Excluded from git via `.gitignore` — stays local only
+
+To reset the cache and reprocess all articles:
+```bash
+rm digest_cache.db
+```
+
+---
+
 ## Security Notes
 
 - Never commit `.env` to git (already excluded via `.gitignore`)

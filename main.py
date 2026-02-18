@@ -3,6 +3,7 @@ import json
 import time
 import re
 import smtplib
+import sqlite3
 import feedparser
 import yaml
 from datetime import datetime, timedelta
@@ -13,6 +14,54 @@ from groq import Groq
 
 load_dotenv()
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+CACHE_DB = "digest_cache.db"
+
+
+def init_cache(db_path=None):
+    """Create the SQLite cache DB and table if they don't exist."""
+    path = db_path or CACHE_DB
+    conn = sqlite3.connect(path)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS article_cache (
+            url TEXT PRIMARY KEY,
+            cached_at TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
+def is_cached(url, db_path=None):
+    """Return True if the article URL has already been processed."""
+    path = db_path or CACHE_DB
+    conn = sqlite3.connect(path)
+    row = conn.execute("SELECT url FROM article_cache WHERE url = ?", (url,)).fetchone()
+    conn.close()
+    return row is not None
+
+
+def add_to_cache(urls, db_path=None):
+    """Add a list of article URLs to the cache."""
+    path = db_path or CACHE_DB
+    today = datetime.now().strftime("%Y-%m-%d")
+    conn = sqlite3.connect(path)
+    conn.executemany(
+        "INSERT OR IGNORE INTO article_cache (url, cached_at) VALUES (?, ?)",
+        [(url, today) for url in urls],
+    )
+    conn.commit()
+    conn.close()
+
+
+def purge_expired(days=7, db_path=None):
+    """Remove cache entries older than `days` days."""
+    path = db_path or CACHE_DB
+    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    conn = sqlite3.connect(path)
+    conn.execute("DELETE FROM article_cache WHERE cached_at < ?", (cutoff,))
+    conn.commit()
+    conn.close()
 
 
 def load_config(path="config.yaml"):
@@ -223,12 +272,18 @@ def send_email(html_content, subject, from_email, to_email, app_password):
 def main():
     config = load_config()
 
+    init_cache()
+    purge_expired(days=config.get("cache", {}).get("expiry_days", 7))
+
     print("Step 1/4: Fetching articles from RSS feeds...")
     articles = fetch_articles(config["feeds"])
     print(f"  Found {len(articles)} total articles")
 
+    fresh = [a for a in articles if not is_cached(a["link"])]
+    print(f"  {len(fresh)} new (skipped {len(articles) - len(fresh)} already seen)")
+
     print("Step 2/4: Filtering relevant articles with AI...")
-    relevant = filter_relevant_articles(articles, config["topics"])
+    relevant = filter_relevant_articles(fresh, config["topics"])
     print(f"  Found {len(relevant)} relevant articles")
 
     print("Step 3/4: Summarizing articles...")
@@ -246,6 +301,9 @@ def main():
         app_password=os.getenv("GMAIL_APP_PASSWORD"),
     )
     print(f"  Digest sent to {os.getenv('GMAIL_TO')}")
+
+    add_to_cache([a["link"] for a in articles])
+    print(f"  Cached {len(articles)} article URLs")
     print("Done!")
 
 

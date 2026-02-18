@@ -3,6 +3,7 @@ from unittest.mock import patch, MagicMock, mock_open
 from datetime import datetime, timedelta
 import json
 import os
+import tempfile
 
 # Set dummy env vars before importing main (avoids Groq client init error)
 os.environ.setdefault("GROQ_API_KEY", "test-key")
@@ -17,6 +18,10 @@ from main import (
     summarize_articles,
     compile_digest,
     send_email,
+    init_cache,
+    is_cached,
+    add_to_cache,
+    purge_expired,
 )
 
 
@@ -379,6 +384,65 @@ class TestSendEmail(unittest.TestCase):
 
         args = mock_server.sendmail.call_args[0]
         self.assertEqual(args[1], ["b@gmail.com"])
+
+
+# ---------------------------------------------------------------------------
+# 7. SQLite Article Cache
+# ---------------------------------------------------------------------------
+
+class TestArticleCache(unittest.TestCase):
+
+    def setUp(self):
+        """Create a temporary DB file for each test."""
+        self.tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.db = self.tmp.name
+        self.tmp.close()
+        init_cache(db_path=self.db)
+
+    def tearDown(self):
+        os.unlink(self.db)
+
+    def test_new_url_not_cached(self):
+        self.assertFalse(is_cached("https://example.com/new-article", db_path=self.db))
+
+    def test_url_cached_after_add(self):
+        add_to_cache(["https://example.com/article-1"], db_path=self.db)
+        self.assertTrue(is_cached("https://example.com/article-1", db_path=self.db))
+
+    def test_multiple_urls_cached(self):
+        urls = ["https://example.com/a", "https://example.com/b", "https://example.com/c"]
+        add_to_cache(urls, db_path=self.db)
+        for url in urls:
+            self.assertTrue(is_cached(url, db_path=self.db))
+
+    def test_duplicate_url_not_raise(self):
+        add_to_cache(["https://example.com/article"], db_path=self.db)
+        # Adding same URL again should not raise
+        add_to_cache(["https://example.com/article"], db_path=self.db)
+        self.assertTrue(is_cached("https://example.com/article", db_path=self.db))
+
+    def test_purge_removes_old_entries(self):
+        import sqlite3
+        # Manually insert an old entry
+        old_date = (datetime.now() - timedelta(days=10)).strftime("%Y-%m-%d")
+        conn = sqlite3.connect(self.db)
+        conn.execute("INSERT INTO article_cache (url, cached_at) VALUES (?, ?)",
+                     ("https://example.com/old", old_date))
+        conn.commit()
+        conn.close()
+
+        purge_expired(days=7, db_path=self.db)
+        self.assertFalse(is_cached("https://example.com/old", db_path=self.db))
+
+    def test_purge_keeps_recent_entries(self):
+        add_to_cache(["https://example.com/recent"], db_path=self.db)
+        purge_expired(days=7, db_path=self.db)
+        self.assertTrue(is_cached("https://example.com/recent", db_path=self.db))
+
+    def test_cache_created_on_init(self):
+        # A fresh DB initialized by setUp should be queryable
+        result = is_cached("https://example.com/anything", db_path=self.db)
+        self.assertFalse(result)
 
 
 # ---------------------------------------------------------------------------
