@@ -1,3 +1,28 @@
+users:
+  - name: Finance Team
+    emails:
+      - finance_recipient1@example.com
+      - finance_recipient2@example.com
+    topics:
+      - AI use cases for Finance Department in a bank (fraud detection, risk management, compliance, financial reporting, forecasting)
+      - Regulatory technology (RegTech) and compliance automation in banking
+
+  - name: Technology Team
+    emails:
+      - finance_recipient1@example.com
+      - finance_recipient2@example.com
+    topics:
+      - AI and Claude for software development (coding agents, developer productivity, code review, LLM tooling, agentic workflows)
+      - Open source AI models and LLM infrastructure
+
+  - name: A-Level Students
+    emails:
+      - student_recipient@example.com
+    topics:
+      - Singapore and overseas scholarships available to pre-university students studying in Singapore under the A-Level curriculum (local university scholarships, government scholarships, international university scholarships)
+      - Scholarship application deadlines and tips for pre-university A-Level students in Singapore applying to local and overseas universities
+
+# Fallback (used only if 'users' key above is absent)
 topics:
   - AI use cases for Finance Department in a bank (fraud detection, risk management, compliance, financial reporting, forecasting)
   - AI and Claude for software development (coding agents, developer productivity, code review, LLM tooling, agentic workflows)
@@ -25,3 +50,14 @@ feeds:
   - https://www.deeplearning.ai/the-batch/feed/
   - https://venturebeat.com/category/ai/feed/
   - https://thenewstack.io/feed/
+
+  # Singapore Scholarships & Education
+  - https://www.scholarshipsguidance.com/feed/
+  - https://sgtutorials.com.sg/feed/
+  - https://www.channelnewsasia.com/rssfeeds/8395986
+  - https://www.straitstimes.com/RSS/singapore
+
+  # International Scholarships & Opportunities
+  - https://opportunitydesk.org/feed/
+  - https://www.scholars4dev.com/feed/
+  - https://afterschoolasia.com/feed/

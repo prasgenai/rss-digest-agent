@@ -23,6 +23,8 @@ from main import (
     add_to_cache,
     purge_expired,
     scrape_article,
+    resolve_users,
+    main,
 )
 
 
@@ -536,6 +538,229 @@ class TestScrapeArticle(unittest.TestCase):
         result = scrape_article("https://example.com/article")
         self.assertNotIn("Short.", result)
         self.assertIn("sufficiently long paragraph", result)
+
+
+# ---------------------------------------------------------------------------
+# 9. resolve_users
+# ---------------------------------------------------------------------------
+
+class TestResolveUsers(unittest.TestCase):
+
+    def test_returns_users_list_when_users_key_present(self):
+        config = {
+            "users": [
+                {"name": "Finance Team", "emails": ["a@gmail.com"], "topics": ["Finance AI"]},
+                {"name": "Tech Team", "emails": ["b@gmail.com"], "topics": ["Dev AI"]},
+            ],
+            "feeds": [],
+        }
+        result = resolve_users(config)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["name"], "Finance Team")
+        self.assertEqual(result[1]["name"], "Tech Team")
+
+    @patch.dict(os.environ, {"GMAIL_TO": "fallback@gmail.com"})
+    def test_fallback_single_user_when_no_users_key(self):
+        config = {"topics": ["AI in Finance"], "feeds": []}
+        result = resolve_users(config)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["name"], "Default")
+
+    @patch.dict(os.environ, {"GMAIL_TO": "a@gmail.com,b@gmail.com"})
+    def test_parses_comma_separated_gmail_to_in_fallback(self):
+        config = {"topics": ["AI"], "feeds": []}
+        result = resolve_users(config)
+        self.assertIn("a@gmail.com", result[0]["emails"])
+        self.assertIn("b@gmail.com", result[0]["emails"])
+
+    @patch.dict(os.environ, {"GMAIL_TO": "a@gmail.com;b@gmail.com"})
+    def test_parses_semicolon_separated_gmail_to_in_fallback(self):
+        config = {"topics": ["AI"], "feeds": []}
+        result = resolve_users(config)
+        self.assertIn("a@gmail.com", result[0]["emails"])
+        self.assertIn("b@gmail.com", result[0]["emails"])
+
+    def test_users_key_takes_precedence_over_topics(self):
+        config = {
+            "users": [
+                {"name": "Team A", "emails": ["a@gmail.com"], "topics": ["Topic A"]},
+            ],
+            "topics": ["Old Topic"],
+            "feeds": [],
+        }
+        result = resolve_users(config)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["topics"], ["Topic A"])
+
+    def test_each_user_has_required_keys(self):
+        config = {
+            "users": [
+                {"name": "Finance Team", "emails": ["a@gmail.com"], "topics": ["Finance AI"]},
+                {"name": "Tech Team", "emails": ["b@gmail.com"], "topics": ["Dev AI"]},
+            ],
+            "feeds": [],
+        }
+        result = resolve_users(config)
+        for user in result:
+            self.assertIn("name", user)
+            self.assertIn("emails", user)
+            self.assertIn("topics", user)
+
+    @patch.dict(os.environ, {"GMAIL_TO": "fallback@gmail.com"})
+    def test_fallback_user_topics_match_config_topics(self):
+        topics = ["AI in Finance", "AI for Dev"]
+        config = {"topics": topics, "feeds": []}
+        result = resolve_users(config)
+        self.assertEqual(result[0]["topics"], topics)
+
+
+# ---------------------------------------------------------------------------
+# 10. main() — multi-user integration
+# ---------------------------------------------------------------------------
+
+class TestMainMultiUser(unittest.TestCase):
+
+    def _make_config_multi_user(self):
+        return {
+            "feeds": ["https://example.com/rss"],
+            "cache": {"expiry_days": 7},
+            "scraping": {"enabled": False},
+            "users": [
+                {"name": "Finance Team", "emails": ["finance@gmail.com"], "topics": ["Finance AI"]},
+                {"name": "Technology Team", "emails": ["tech@gmail.com"], "topics": ["Dev AI"]},
+            ],
+        }
+
+    def _make_config_single_user(self):
+        return {
+            "feeds": ["https://example.com/rss"],
+            "cache": {"expiry_days": 7},
+            "scraping": {"enabled": False},
+            "topics": ["AI in Finance"],
+        }
+
+    @patch("main.add_to_cache")
+    @patch("main.is_cached", return_value=False)
+    @patch("main.purge_expired")
+    @patch("main.init_cache")
+    @patch("main.send_email")
+    @patch("main.compile_digest", return_value="<html></html>")
+    @patch("main.summarize_articles", side_effect=lambda x: x)
+    @patch("main.filter_relevant_articles", return_value=[])
+    @patch("main.fetch_articles", return_value=[])
+    @patch("main.load_config")
+    def test_send_email_called_once_per_user_group(
+        self, mock_load, mock_fetch, mock_filter, mock_summarize,
+        mock_compile, mock_send, mock_init, mock_purge, mock_cached, mock_cache
+    ):
+        mock_load.return_value = self._make_config_multi_user()
+        main()
+        self.assertEqual(mock_send.call_count, 2)
+
+    @patch("main.add_to_cache")
+    @patch("main.is_cached", return_value=False)
+    @patch("main.purge_expired")
+    @patch("main.init_cache")
+    @patch("main.send_email")
+    @patch("main.compile_digest", return_value="<html></html>")
+    @patch("main.summarize_articles", side_effect=lambda x: x)
+    @patch("main.filter_relevant_articles", return_value=[])
+    @patch("main.fetch_articles", return_value=[])
+    @patch("main.load_config")
+    def test_email_subject_includes_group_name(
+        self, mock_load, mock_fetch, mock_filter, mock_summarize,
+        mock_compile, mock_send, mock_init, mock_purge, mock_cached, mock_cache
+    ):
+        mock_load.return_value = self._make_config_multi_user()
+        main()
+        subjects = [c.kwargs["subject"] for c in mock_send.call_args_list]
+        self.assertTrue(any("Finance Team" in s for s in subjects))
+        self.assertTrue(any("Technology Team" in s for s in subjects))
+
+    @patch("main.add_to_cache")
+    @patch("main.is_cached", return_value=False)
+    @patch("main.purge_expired")
+    @patch("main.init_cache")
+    @patch("main.send_email")
+    @patch("main.compile_digest", return_value="<html></html>")
+    @patch("main.summarize_articles", side_effect=lambda x: x)
+    @patch("main.filter_relevant_articles", return_value=[])
+    @patch("main.fetch_articles", return_value=[])
+    @patch("main.load_config")
+    def test_fetch_articles_called_only_once(
+        self, mock_load, mock_fetch, mock_filter, mock_summarize,
+        mock_compile, mock_send, mock_init, mock_purge, mock_cached, mock_cache
+    ):
+        mock_load.return_value = self._make_config_multi_user()
+        main()
+        mock_fetch.assert_called_once()
+
+    @patch("main.add_to_cache")
+    @patch("main.is_cached", return_value=False)
+    @patch("main.purge_expired")
+    @patch("main.init_cache")
+    @patch("main.send_email")
+    @patch("main.compile_digest", return_value="<html></html>")
+    @patch("main.summarize_articles", side_effect=lambda x: x)
+    @patch("main.filter_relevant_articles", return_value=[])
+    @patch("main.fetch_articles", return_value=[])
+    @patch("main.load_config")
+    def test_add_to_cache_called_only_once(
+        self, mock_load, mock_fetch, mock_filter, mock_summarize,
+        mock_compile, mock_send, mock_init, mock_purge, mock_cached, mock_cache
+    ):
+        mock_load.return_value = self._make_config_multi_user()
+        main()
+        mock_cache.assert_called_once()
+
+    @patch("main.add_to_cache")
+    @patch("main.is_cached", return_value=False)
+    @patch("main.purge_expired")
+    @patch("main.init_cache")
+    @patch("main.send_email")
+    @patch("main.compile_digest", return_value="<html></html>")
+    @patch("main.summarize_articles", side_effect=lambda x: x)
+    @patch("main.scrape_article", return_value="scraped content")
+    @patch("main.filter_relevant_articles")
+    @patch("main.fetch_articles")
+    @patch("main.load_config")
+    def test_scrape_article_called_once_per_article(
+        self, mock_load, mock_fetch, mock_filter, mock_scrape,
+        mock_summarize, mock_compile, mock_send, mock_init,
+        mock_purge, mock_cached, mock_cache
+    ):
+        article = {
+            "link": "https://example.com/a", "title": "T",
+            "summary": "S", "published": "2026-02-18", "source": "Src",
+            "relevance_score": 8,
+        }
+        mock_fetch.return_value = [article]
+        # Both user groups receive the same article dict (same Python object)
+        mock_filter.side_effect = [[article], [article]]
+        config = self._make_config_multi_user()
+        config["scraping"] = {"enabled": True, "max_chars": 2000, "timeout_seconds": 10}
+        mock_load.return_value = config
+        main()
+        # 'scraped' flag set after first group prevents re-scraping for second group
+        mock_scrape.assert_called_once()
+
+    @patch("main.add_to_cache")
+    @patch("main.is_cached", return_value=False)
+    @patch("main.purge_expired")
+    @patch("main.init_cache")
+    @patch("main.send_email")
+    @patch("main.compile_digest", return_value="<html></html>")
+    @patch("main.summarize_articles", side_effect=lambda x: x)
+    @patch("main.filter_relevant_articles", return_value=[])
+    @patch("main.fetch_articles", return_value=[])
+    @patch("main.load_config")
+    def test_backward_compat_no_users_key_sends_once(
+        self, mock_load, mock_fetch, mock_filter, mock_summarize,
+        mock_compile, mock_send, mock_init, mock_purge, mock_cached, mock_cache
+    ):
+        mock_load.return_value = self._make_config_single_user()
+        main()
+        mock_send.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
