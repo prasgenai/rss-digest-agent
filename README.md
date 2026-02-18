@@ -26,9 +26,12 @@ An agentic app that fetches articles from RSS feeds, filters them by topic using
 rss-digest-agent/
 ├── .env              # API keys and email credentials (never commit this)
 ├── .gitignore        # Excludes .env from git
+├── .dockerignore     # Excludes .env and dev files from Docker image
 ├── config.yaml       # RSS feeds and topics (edit this to customize)
+├── Dockerfile        # Docker container definition
 ├── requirements.txt  # Python dependencies
 ├── main.py           # Main agent logic
+├── test_main.py      # Unit tests (27 tests)
 └── README.md
 ```
 
@@ -50,16 +53,30 @@ pip3 install -r requirements.txt
 
 ### 3. Configure credentials
 
-Edit `.env`:
+Create a `.env` file in the project root by copying the sample below:
 
 ```env
-GROQ_API_KEY=your_groq_api_key_here
+# ── Groq API ──────────────────────────────────────────────
+# Get your free key at https://console.groq.com → API Keys
+GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# ── Gmail Sender ───────────────────────────────────────────
+# The Gmail address the digest will be sent FROM
 GMAIL_FROM=your_email@gmail.com
+
+# ── Digest Recipient ───────────────────────────────────────
+# The email address the digest will be delivered TO
+# Can be the same as GMAIL_FROM or a different address
 GMAIL_TO=your_email@gmail.com
+
+# ── Gmail App Password ─────────────────────────────────────
+# NOT your Gmail login password — a separate 16-char app password
+# How to generate: myaccount.google.com → Security → App Passwords
+# Enter without spaces (e.g. abcdabcdabcdabcd)
 GMAIL_APP_PASSWORD=your16charapppassword
 ```
 
-> **Note:** The Gmail App Password should be entered without spaces (e.g. `fcdzorkakuqkhhfe`).
+> **Never commit `.env` to git.** It is already excluded via `.gitignore`.
 
 ### 4. Customize topics and feeds
 
@@ -109,6 +126,39 @@ feeds:
 ```
 
 To find the RSS feed URL for any website, look for an RSS icon or append `/feed` or `/rss` to the site URL.
+
+---
+
+## Running with Docker
+
+Docker lets you run the agent in an isolated container without installing Python or dependencies locally.
+
+### 1. Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/) installed and running
+- `.env` file configured with your credentials (see Setup above)
+
+### 2. Build the image
+
+```bash
+docker build -t rss-digest-agent .
+```
+
+### 3. Run the container
+
+Pass your `.env` file securely at runtime — it is never baked into the image:
+
+```bash
+docker run --env-file .env rss-digest-agent
+```
+
+### 4. Schedule with cron (Docker)
+
+```
+0 8 * * * docker run --env-file /home/prashant/claude_practice/rss-digest-agent/.env rss-digest-agent >> /tmp/digest.log 2>&1
+```
+
+> **Note:** The `.env` file is excluded from the Docker image via `.dockerignore`. Always pass it with `--env-file` at runtime.
 
 ---
 
