@@ -31,7 +31,7 @@ rss-digest-agent/
 ├── Dockerfile        # Docker container definition
 ├── requirements.txt  # Python dependencies
 ├── main.py           # Main agent logic
-├── test_main.py      # Unit tests (27 tests)
+├── test_main.py      # Unit tests (58 tests)
 └── README.md
 ```
 
@@ -85,6 +85,34 @@ GMAIL_APP_PASSWORD=your16charapppassword
 
 Edit `config.yaml` to add/remove RSS feeds or change the topics the AI filters for.
 
+### 5. Configure user groups (optional)
+
+The agent supports multiple user groups, each with their own topics and email recipients. RSS feeds are fetched **once** and shared; filtering, summarization, and email delivery happen independently per group.
+
+Add a `users:` block in `config.yaml`:
+
+```yaml
+users:
+  - name: Finance Team
+    emails:
+      - person1@gmail.com
+      - person2@gmail.com
+    topics:
+      - AI use cases for Finance Department in a bank
+      - Regulatory technology and compliance automation
+
+  - name: Technology Team
+    emails:
+      - tech@gmail.com
+    topics:
+      - AI and Claude for software development
+      - Open source AI models and LLM infrastructure
+```
+
+- When `users:` is present, `GMAIL_TO` is ignored — recipients are defined per group in `config.yaml`
+- When `users:` is absent, the agent falls back to single-user mode using `GMAIL_TO` and `topics:` from `config.yaml`
+- Each group receives a digest with its own subject line: `AI Research Digest (Finance Team) - 2026-02-18`
+
 ---
 
 ## Running
@@ -93,15 +121,21 @@ Edit `config.yaml` to add/remove RSS feeds or change the topics the AI filters f
 python3 main.py
 ```
 
-Expected output:
+Expected output (multi-user mode):
 ```
-Step 1/4: Fetching articles from RSS feeds...
-  Found 30 total articles
-Step 2/4: Filtering relevant articles with AI...
-  Found 7 relevant articles
-Step 3/4: Summarizing articles...
-Step 4/4: Sending digest email...
-  Digest sent to your_email@gmail.com
+Step 1: Fetching articles from RSS feeds...
+  Found 30 unique articles
+  28 new (skipped 2 already seen)
+
+── User group: Finance Team ────────────────────────
+  Found 5 relevant articles
+  Digest sent to prasgenai@gmail.com,ssohni@gmail.com (Finance Team)
+
+── User group: Technology Team ────────────────────────
+  Found 4 relevant articles
+  Digest sent to prasgenai@gmail.com,ssohni@gmail.com (Technology Team)
+
+  Cached 28 article URLs
 Done!
 ```
 
