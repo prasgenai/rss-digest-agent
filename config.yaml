@@ -2,6 +2,9 @@ topics:
   - AI use cases for Finance Department in a bank (fraud detection, risk management, compliance, financial reporting, forecasting)
   - AI and Claude for software development (coding agents, developer productivity, code review, LLM tooling, agentic workflows)
 
+cache:
+  expiry_days: 7  # articles seen within this many days will not be reprocessed
+
 feeds:
   # Finance & Banking AI
   - https://www.finextra.com/rss/channel.aspx
