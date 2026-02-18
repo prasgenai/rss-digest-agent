@@ -138,6 +138,17 @@ class TestFetchArticles(unittest.TestCase):
         self.assertEqual(articles, [])
 
     @patch("main.feedparser.parse")
+    def test_duplicate_urls_across_feeds_deduplicated(self, mock_parse):
+        recent = datetime.now() - timedelta(hours=2)
+        mock_parse.return_value = self._make_feed(
+            "Same Article", published_parsed=recent.timetuple()[:9]
+        )
+        # Same feed URL passed twice simulates same article in two feeds
+        articles = fetch_articles(["https://feed1.com/rss", "https://feed2.com/rss"])
+        deduplicated = list({a["link"]: a for a in articles}.values())
+        self.assertEqual(len(deduplicated), 1)
+
+    @patch("main.feedparser.parse")
     def test_summary_truncated_to_500_chars(self, mock_parse):
         long_summary = "x" * 1000
         mock_parse.return_value = self._make_feed("Title", summary=long_summary)
