@@ -97,6 +97,21 @@ def load_config(path="config.yaml"):
         return yaml.safe_load(f)
 
 
+def resolve_users(config):
+    """Return list of user dicts from config.
+    Multi-user mode: uses config['users'].
+    Single-user fallback: builds one user from config['topics'] + GMAIL_TO env var.
+    """
+    if "users" in config:
+        return config["users"]
+    gmail_to = os.getenv("GMAIL_TO", "")
+    return [{
+        "name": "Default",
+        "emails": [e.strip() for e in re.split(r"[,;]", gmail_to) if e.strip()],
+        "topics": config["topics"],
+    }]
+
+
 def fetch_articles(feeds, hours=24):
     """Fetch articles from RSS feeds published in the last `hours` hours."""
     articles = []
@@ -299,53 +314,61 @@ def send_email(html_content, subject, from_email, to_email, app_password):
 
 def main():
     config = load_config()
-
     init_cache()
     purge_expired(days=config.get("cache", {}).get("expiry_days", 7))
 
-    print("Step 1/4: Fetching articles from RSS feeds...")
+    # Shared: fetch once for all users
+    print("Step 1: Fetching articles from RSS feeds...")
     articles = fetch_articles(config["feeds"])
-    articles = list({a["link"]: a for a in articles}.values())  # deduplicate by URL
+    articles = list({a["link"]: a for a in articles}.values())
     print(f"  Found {len(articles)} unique articles")
 
     fresh = [a for a in articles if not is_cached(a["link"])]
     print(f"  {len(fresh)} new (skipped {len(articles) - len(fresh)} already seen)")
 
-    print("Step 2/4: Filtering relevant articles with AI...")
-    relevant = filter_relevant_articles(fresh, config["topics"])
-    print(f"  Found {len(relevant)} relevant articles")
-
-    scraping_cfg = config.get("scraping", {})
-    if scraping_cfg.get("enabled", True):
-        print("Step 3a: Scraping full article content...")
-        for article in relevant:
-            scraped = scrape_article(
-                article["link"],
-                max_chars=scraping_cfg.get("max_chars", 2000),
-                timeout=scraping_cfg.get("timeout_seconds", 10),
-            )
-            if scraped:
-                article["summary"] = scraped
-        print(f"  Scraped content for {sum(1 for a in relevant if len(a['summary']) > 500)} articles")
-
-    print("Step 3/4: Summarizing articles...")
-    summarized = summarize_articles(relevant)
-
-    print("Step 4/4: Sending digest email...")
+    users = resolve_users(config)
     today = datetime.now().strftime("%Y-%m-%d")
-    html = compile_digest(summarized, config["topics"])
+    scraping_cfg = config.get("scraping", {})
 
-    send_email(
-        html_content=html,
-        subject=f"AI Research Digest - {today}",
-        from_email=os.getenv("GMAIL_FROM"),
-        to_email=os.getenv("GMAIL_TO"),
-        app_password=os.getenv("GMAIL_APP_PASSWORD"),
-    )
-    print(f"  Digest sent to {os.getenv('GMAIL_TO')}")
+    # Per-user loop
+    for user in users:
+        name, topics = user["name"], user["topics"]
+        to_email = ",".join(user["emails"])
+        print(f"\n── User group: {name} ────────────────────────")
 
-    add_to_cache([a["link"] for a in articles])
-    print(f"  Cached {len(articles)} article URLs")
+        relevant = filter_relevant_articles(fresh, topics)
+        print(f"  Found {len(relevant)} relevant articles")
+
+        if scraping_cfg.get("enabled", True):
+            print("Step 3a: Scraping full article content...")
+            scraped_count = 0
+            for article in relevant:
+                if not article.get("scraped"):
+                    scraped = scrape_article(
+                        article["link"],
+                        max_chars=scraping_cfg.get("max_chars", 2000),
+                        timeout=scraping_cfg.get("timeout_seconds", 10),
+                    )
+                    if scraped:
+                        article["summary"] = scraped
+                    article["scraped"] = True
+                    scraped_count += 1
+            print(f"  Scraped {scraped_count} new articles")
+
+        summarized = summarize_articles(relevant)
+        html = compile_digest(summarized, topics)
+        send_email(
+            html_content=html,
+            subject=f"AI Research Digest ({name}) - {today}",
+            from_email=os.getenv("GMAIL_FROM"),
+            to_email=to_email,
+            app_password=os.getenv("GMAIL_APP_PASSWORD"),
+        )
+        print(f"  Digest sent to {to_email} ({name})")
+
+    # Cache after all users processed
+    add_to_cache([a["link"] for a in fresh])
+    print(f"\n  Cached {len(fresh)} article URLs")
     print("Done!")
 
 

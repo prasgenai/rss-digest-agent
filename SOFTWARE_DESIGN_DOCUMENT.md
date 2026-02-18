@@ -3,7 +3,7 @@
 
 | Field         | Details                          |
 |---------------|----------------------------------|
-| Document Ver  | 1.0                              |
+| Document Ver  | 1.5                              |
 | Date          | February 2026                    |
 | Author        | Prashant                         |
 | Status        | Released                         |
@@ -204,15 +204,18 @@ main.py
   │
   ├── load_config()          reads config.yaml
   │
-  ├── fetch_articles()       calls feedparser → RSS URLs
+  ├── resolve_users()        returns user list (multi-user or fallback)
   │
-  ├── filter_relevant()      calls Groq API (batched, 5 articles/call)
+  ├── fetch_articles()       calls feedparser → RSS URLs  [shared, once]
   │
-  ├── summarize_articles()   calls Groq API (batched, 5 articles/call)
+  ├── [per-user loop]
+  │     ├── filter_relevant()      calls Groq API (batched, 5 articles/call)
+  │     ├── scrape_article()       fetches full article text (requests + BS4)
+  │     ├── summarize_articles()   calls Groq API (batched, 5 articles/call)
+  │     ├── compile_digest()       pure Python HTML builder
+  │     └── send_email()           calls smtplib → Gmail SMTP
   │
-  ├── compile_digest()       pure Python HTML builder
-  │
-  └── send_email()           calls smtplib → Gmail SMTP
+  └── add_to_cache()         called once after all users processed
 ```
 
 ### Design Principles Applied
@@ -429,8 +432,14 @@ All dependencies are **open source**. No proprietary libraries.
 
 ### `load_config(path)`
 - **Input:** Path to YAML file (default: `config.yaml`)
-- **Output:** Dict with `feeds` (list of URLs) and `topics` (list of strings)
+- **Output:** Dict with `feeds`, `topics` (fallback), and optionally `users`
 - **Error handling:** Raises exception if file not found
+
+### `resolve_users(config)`
+- **Input:** Parsed config dict
+- **Output:** List of user dicts, each with `name`, `emails`, and `topics`
+- **Multi-user mode:** Returns `config['users']` when `users` key is present
+- **Single-user fallback:** Builds one user from `config['topics']` + `GMAIL_TO` env var (comma/semicolon separated)
 
 ### `fetch_articles(feeds, hours=24)`
 - **Input:** List of RSS feed URLs, lookback window in hours
@@ -482,6 +491,15 @@ All dependencies are **open source**. No proprietary libraries.
 ### Config Schema (`config.yaml`)
 
 ```yaml
+# Multi-user mode (optional — takes precedence over 'topics' when present)
+users:
+  - name: string         # Display name for the group
+    emails:
+      - string           # Recipient email addresses
+    topics:
+      - string           # Topics for this group
+
+# Fallback — used only when 'users' key is absent
 topics:
   - string    # Natural language topic description
 
@@ -587,13 +605,14 @@ Edit `config.yaml` — no code changes needed. The agent picks up changes on the
 | Multiple email recipients | Digest delivered to comma/semicolon separated addresses | ✅ Done (v1.2) |
 | SQLite article cache | Avoids re-processing seen articles; saves Groq API calls | ✅ Done (v1.3) |
 | Full article scraping | Richer summaries from full article text via requests + BeautifulSoup | ✅ Done (v1.4) |
+| Multi-user personalized digests | Each user group gets its own topics, recipients, and digest email; shared fetch phase | ✅ Done (v1.5) |
 
 ### Potential Future Enhancements
 
 | Enhancement | Benefit |
 |---|---|
 | ~~Full article scraping~~ | ~~Richer summaries beyond RSS excerpt~~ |
-| Multi-user support | Each user gets a personalized digest |
+| ~~Multi-user support~~ | ~~Each user gets a personalized digest~~ |
 | Web UI for config | Non-technical users can manage feeds and topics |
 | Slack/Teams delivery | Alternative to email |
 | Weekly digest mode | Longer lookback window option |
@@ -601,5 +620,5 @@ Edit `config.yaml` — no code changes needed. The agent picks up changes on the
 
 ---
 
-*Document generated for RSS Research Digest Agent v1.0*
+*Document generated for RSS Research Digest Agent v1.5*
 *All technologies used are open source.*
