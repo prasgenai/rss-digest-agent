@@ -249,6 +249,56 @@ Format EXACTLY as (no extra text before [1]):
     return articles
 
 
+def analyze_sentiment(articles):
+    """Classify each article as Positive, Negative, or Neutral using Groq LLM (batched)."""
+    if not articles:
+        return []
+
+    batch_size = 5
+
+    for i in range(0, len(articles), batch_size):
+        batch = articles[i:i + batch_size]
+        articles_text = ""
+        for j, article in enumerate(batch, 1):
+            content = article.get("bullets", article["summary"])[:300]
+            articles_text += f"[{j}] Title: {article['title']}\nContent: {content}\n\n"
+
+        prompt = f"""Analyze the sentiment of each article for a finance and technology professional audience.
+Classify each as Positive, Negative, or Neutral based on the implications for the industry.
+Return ONLY a valid JSON array (no extra text):
+[{{"id": 1, "sentiment": "Positive"}}, {{"id": 2, "sentiment": "Negative"}}, ...]
+
+Sentiment must be exactly one of: "Positive", "Negative", "Neutral". Articles:
+{articles_text}"""
+
+        try:
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0,
+                max_tokens=200,
+            )
+            result_text = response.choices[0].message.content.strip()
+            match = re.search(r"\[.*\]", result_text, re.DOTALL)
+            if match:
+                results = json.loads(match.group())
+                for result in results:
+                    idx = result.get("id", 0) - 1
+                    if 0 <= idx < len(batch):
+                        sentiment = result.get("sentiment", "Neutral")
+                        if sentiment not in ("Positive", "Negative", "Neutral"):
+                            sentiment = "Neutral"
+                        batch[idx]["sentiment"] = sentiment
+        except Exception as e:
+            print(f"  Warning: Sentiment error on batch {i // batch_size + 1}: {e}")
+            for article in batch:
+                article.setdefault("sentiment", "Neutral")
+
+        time.sleep(1)
+
+    return articles
+
+
 def compile_digest(articles, topics):
     """Compile an HTML email digest."""
     today = datetime.now().strftime("%B %d, %Y")
@@ -267,16 +317,22 @@ def compile_digest(articles, topics):
     if not articles:
         html += '<p style="padding: 20px; color: #888;">No relevant articles found today. Check back tomorrow!</p>'
     else:
+        sentiment_colors = {"Positive": "#28a745", "Negative": "#dc3545", "Neutral": "#6c757d"}
         for article in articles:
             score = article.get("relevance_score", 0)
             bar_color = "#28a745" if score >= 9 else "#4a90d9" if score >= 7 else "#fd7e14"
             bullets_html = article.get("bullets", "").replace("\n", "<br>").replace("•", "&#8226;")
+            sentiment = article.get("sentiment", "")
+            sentiment_html = ""
+            if sentiment:
+                color = sentiment_colors.get(sentiment, "#6c757d")
+                sentiment_html = f' &nbsp;·&nbsp; <span style="color: {color}; font-weight: bold;">&#9679; {sentiment}</span>'
             html += f"""  <div style="margin: 20px 0; padding: 18px; border-left: 4px solid {bar_color}; background: #f8f9fa; border-radius: 0 6px 6px 0;">
     <h3 style="margin: 0 0 6px 0; font-size: 16px; line-height: 1.4;">
       <a href="{article['link']}" style="color: #1a1a2e; text-decoration: none;">{article['title']}</a>
     </h3>
     <p style="color: #999; font-size: 12px; margin: 0 0 10px 0;">
-      {article['source']} &nbsp;·&nbsp; {article['published']} &nbsp;·&nbsp; Relevance: {score}/10
+      {article['source']} &nbsp;·&nbsp; {article['published']} &nbsp;·&nbsp; Relevance: {score}/10{sentiment_html}
     </p>
     <div style="font-size: 14px; line-height: 1.7; color: #444;">
       {bullets_html}
@@ -329,6 +385,7 @@ def main():
     users = resolve_users(config)
     today = datetime.now().strftime("%Y-%m-%d")
     scraping_cfg = config.get("scraping", {})
+    sentiment_cfg = config.get("sentiment", {})
 
     # Per-user loop
     for user in users:
@@ -356,6 +413,11 @@ def main():
             print(f"  Scraped {scraped_count} new articles")
 
         summarized = summarize_articles(relevant)
+
+        if sentiment_cfg.get("enabled", True):
+            print("  Analyzing article sentiment...")
+            summarized = analyze_sentiment(summarized)
+
         html = compile_digest(summarized, topics)
         send_email(
             html_content=html,

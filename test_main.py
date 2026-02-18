@@ -24,6 +24,7 @@ from main import (
     purge_expired,
     scrape_article,
     resolve_users,
+    analyze_sentiment,
     main,
 )
 
@@ -32,7 +33,7 @@ from main import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-def make_article(title="Test Article", score=8, with_bullets=False):
+def make_article(title="Test Article", score=8, with_bullets=False, sentiment=None):
     article = {
         "title": title,
         "link": "https://example.com/article",
@@ -43,6 +44,8 @@ def make_article(title="Test Article", score=8, with_bullets=False):
     }
     if with_bullets:
         article["bullets"] = "• Point one\n• Point two\n• Point three"
+    if sentiment:
+        article["sentiment"] = sentiment
     return article
 
 
@@ -330,6 +333,16 @@ class TestCompileDigest(unittest.TestCase):
         html = compile_digest(articles, ["AI in Finance"])
         self.assertIn("#fd7e14", html)
 
+    def test_sentiment_label_appears_in_output(self):
+        articles = [make_article(with_bullets=True, sentiment="Positive")]
+        html = compile_digest(articles, ["AI in Finance"])
+        self.assertIn("Positive", html)
+
+    def test_article_without_sentiment_key_does_not_crash(self):
+        articles = [make_article(with_bullets=True)]  # no sentiment key
+        html = compile_digest(articles, ["AI in Finance"])
+        self.assertIn("<html>", html)
+
 
 # ---------------------------------------------------------------------------
 # 6. send_email
@@ -557,8 +570,69 @@ class TestScrapeArticle(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# 9. resolve_users
+# 9. analyze_sentiment
 # ---------------------------------------------------------------------------
+
+class TestAnalyzeSentiment(unittest.TestCase):
+
+    def test_returns_empty_for_no_articles(self):
+        result = analyze_sentiment([])
+        self.assertEqual(result, [])
+
+    @patch("main.time.sleep")
+    @patch("main.client")
+    def test_positive_sentiment_added_to_article(self, mock_client, mock_sleep):
+        mock_client.chat.completions.create.return_value = make_groq_response(
+            '[{"id": 1, "sentiment": "Positive"}]'
+        )
+        articles = [make_article(with_bullets=True)]
+        result = analyze_sentiment(articles)
+        self.assertEqual(result[0]["sentiment"], "Positive")
+
+    @patch("main.time.sleep")
+    @patch("main.client")
+    def test_negative_sentiment_added_to_article(self, mock_client, mock_sleep):
+        mock_client.chat.completions.create.return_value = make_groq_response(
+            '[{"id": 1, "sentiment": "Negative"}]'
+        )
+        articles = [make_article(with_bullets=True)]
+        result = analyze_sentiment(articles)
+        self.assertEqual(result[0]["sentiment"], "Negative")
+
+    @patch("main.time.sleep")
+    @patch("main.client")
+    def test_neutral_sentiment_added_to_article(self, mock_client, mock_sleep):
+        mock_client.chat.completions.create.return_value = make_groq_response(
+            '[{"id": 1, "sentiment": "Neutral"}]'
+        )
+        articles = [make_article(with_bullets=True)]
+        result = analyze_sentiment(articles)
+        self.assertEqual(result[0]["sentiment"], "Neutral")
+
+    @patch("main.time.sleep")
+    @patch("main.client")
+    def test_invalid_sentiment_defaults_to_neutral(self, mock_client, mock_sleep):
+        # LLM returns an unexpected value — must be normalised to Neutral
+        mock_client.chat.completions.create.return_value = make_groq_response(
+            '[{"id": 1, "sentiment": "Mixed"}]'
+        )
+        articles = [make_article(with_bullets=True)]
+        result = analyze_sentiment(articles)
+        self.assertEqual(result[0]["sentiment"], "Neutral")
+
+    @patch("main.time.sleep")
+    @patch("main.client")
+    def test_groq_error_sets_neutral_fallback(self, mock_client, mock_sleep):
+        mock_client.chat.completions.create.side_effect = Exception("API error")
+        articles = [make_article(with_bullets=True)]
+        result = analyze_sentiment(articles)
+        self.assertEqual(result[0]["sentiment"], "Neutral")
+
+
+# ---------------------------------------------------------------------------
+# 10. resolve_users
+# ---------------------------------------------------------------------------
+
 
 class TestResolveUsers(unittest.TestCase):
 
@@ -631,7 +705,7 @@ class TestResolveUsers(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# 10. main() — multi-user integration
+# 11. main() — multi-user integration
 # ---------------------------------------------------------------------------
 
 class TestMainMultiUser(unittest.TestCase):
@@ -806,6 +880,51 @@ class TestMainMultiUser(unittest.TestCase):
         mock_load.return_value = config
         main()
         mock_scrape.assert_not_called()
+
+    @patch("main.add_to_cache")
+    @patch("main.is_cached", return_value=False)
+    @patch("main.purge_expired")
+    @patch("main.init_cache")
+    @patch("main.send_email")
+    @patch("main.compile_digest", return_value="<html></html>")
+    @patch("main.analyze_sentiment", side_effect=lambda x: x)
+    @patch("main.summarize_articles", side_effect=lambda x: x)
+    @patch("main.filter_relevant_articles", return_value=[])
+    @patch("main.fetch_articles", return_value=[])
+    @patch("main.load_config")
+    def test_analyze_sentiment_called_per_user_group(
+        self, mock_load, mock_fetch, mock_filter, mock_summarize,
+        mock_sentiment, mock_compile, mock_send, mock_init,
+        mock_purge, mock_cached, mock_cache
+    ):
+        config = self._make_config_multi_user()
+        config["sentiment"] = {"enabled": True}
+        mock_load.return_value = config
+        main()
+        # Called once for each of the 2 user groups
+        self.assertEqual(mock_sentiment.call_count, 2)
+
+    @patch("main.add_to_cache")
+    @patch("main.is_cached", return_value=False)
+    @patch("main.purge_expired")
+    @patch("main.init_cache")
+    @patch("main.send_email")
+    @patch("main.compile_digest", return_value="<html></html>")
+    @patch("main.analyze_sentiment")
+    @patch("main.summarize_articles", side_effect=lambda x: x)
+    @patch("main.filter_relevant_articles", return_value=[])
+    @patch("main.fetch_articles", return_value=[])
+    @patch("main.load_config")
+    def test_analyze_sentiment_not_called_when_disabled(
+        self, mock_load, mock_fetch, mock_filter, mock_summarize,
+        mock_sentiment, mock_compile, mock_send, mock_init,
+        mock_purge, mock_cached, mock_cache
+    ):
+        config = self._make_config_multi_user()
+        config["sentiment"] = {"enabled": False}
+        mock_load.return_value = config
+        main()
+        mock_sentiment.assert_not_called()
 
     @patch("main.add_to_cache")
     @patch("main.is_cached", return_value=False)
