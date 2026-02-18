@@ -305,7 +305,8 @@ def main():
 
     print("Step 1/4: Fetching articles from RSS feeds...")
     articles = fetch_articles(config["feeds"])
-    print(f"  Found {len(articles)} total articles")
+    articles = list({a["link"]: a for a in articles}.values())  # deduplicate by URL
+    print(f"  Found {len(articles)} unique articles")
 
     fresh = [a for a in articles if not is_cached(a["link"])]
     print(f"  {len(fresh)} new (skipped {len(articles) - len(fresh)} already seen)")
