@@ -31,7 +31,7 @@ rss-digest-agent/
 ├── Dockerfile        # Docker container definition
 ├── requirements.txt  # Python dependencies
 ├── main.py           # Main agent logic
-├── test_main.py      # Unit tests (58 tests)
+├── test_main.py      # Unit tests (62 tests)
 └── README.md
 ```
 
