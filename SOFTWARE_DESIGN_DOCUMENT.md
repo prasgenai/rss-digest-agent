@@ -3,7 +3,7 @@
 
 | Field         | Details                          |
 |---------------|----------------------------------|
-| Document Ver  | 1.5                              |
+| Document Ver  | 1.5.1                            |
 | Date          | February 2026                    |
 | Author        | Prashant                         |
 | Status        | Released                         |
@@ -620,5 +620,5 @@ Edit `config.yaml` — no code changes needed. The agent picks up changes on the
 
 ---
 
-*Document generated for RSS Research Digest Agent v1.5*
+*Document generated for RSS Research Digest Agent v1.5.1*
 *All technologies used are open source.*
