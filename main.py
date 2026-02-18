@@ -5,7 +5,9 @@ import re
 import smtplib
 import sqlite3
 import feedparser
+import requests
 import yaml
+from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -62,6 +64,32 @@ def purge_expired(days=7, db_path=None):
     conn.execute("DELETE FROM article_cache WHERE cached_at < ?", (cutoff,))
     conn.commit()
     conn.close()
+
+
+def scrape_article(url, max_chars=2000, timeout=10):
+    """Fetch full article text from URL. Returns None if scraping fails."""
+    try:
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; RSSDigestAgent/1.0)"}
+        response = requests.get(url, headers=headers, timeout=timeout)
+        response.raise_for_status()
+
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        # Remove non-content tags
+        for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
+            tag.decompose()
+
+        # Extract meaningful paragraphs (skip short ones like nav labels)
+        paragraphs = soup.find_all("p")
+        text = " ".join(
+            p.get_text(strip=True)
+            for p in paragraphs
+            if len(p.get_text(strip=True)) > 50
+        )
+
+        return text[:max_chars] if text else None
+    except Exception:
+        return None
 
 
 def load_config(path="config.yaml"):
@@ -285,6 +313,19 @@ def main():
     print("Step 2/4: Filtering relevant articles with AI...")
     relevant = filter_relevant_articles(fresh, config["topics"])
     print(f"  Found {len(relevant)} relevant articles")
+
+    scraping_cfg = config.get("scraping", {})
+    if scraping_cfg.get("enabled", True):
+        print("Step 3a: Scraping full article content...")
+        for article in relevant:
+            scraped = scrape_article(
+                article["link"],
+                max_chars=scraping_cfg.get("max_chars", 2000),
+                timeout=scraping_cfg.get("timeout_seconds", 10),
+            )
+            if scraped:
+                article["summary"] = scraped
+        print(f"  Scraped content for {sum(1 for a in relevant if len(a['summary']) > 500)} articles")
 
     print("Step 3/4: Summarizing articles...")
     summarized = summarize_articles(relevant)

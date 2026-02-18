@@ -5,6 +5,11 @@ topics:
 cache:
   expiry_days: 7  # articles seen within this many days will not be reprocessed
 
+scraping:
+  enabled: true          # set to false to use RSS excerpts only (faster runs)
+  max_chars: 2000        # maximum characters to use from scraped article content
+  timeout_seconds: 10    # seconds to wait before giving up on a page load
+
 feeds:
   # Finance & Banking AI
   - https://www.finextra.com/rss/channel.aspx
