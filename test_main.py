@@ -22,6 +22,7 @@ from main import (
     is_cached,
     add_to_cache,
     purge_expired,
+    scrape_article,
 )
 
 
@@ -135,6 +136,17 @@ class TestFetchArticles(unittest.TestCase):
         # Should not raise; should return empty list
         articles = fetch_articles(["https://bad-feed.com/rss"])
         self.assertEqual(articles, [])
+
+    @patch("main.feedparser.parse")
+    def test_duplicate_urls_across_feeds_deduplicated(self, mock_parse):
+        recent = datetime.now() - timedelta(hours=2)
+        mock_parse.return_value = self._make_feed(
+            "Same Article", published_parsed=recent.timetuple()[:9]
+        )
+        # Same feed URL passed twice simulates same article in two feeds
+        articles = fetch_articles(["https://feed1.com/rss", "https://feed2.com/rss"])
+        deduplicated = list({a["link"]: a for a in articles}.values())
+        self.assertEqual(len(deduplicated), 1)
 
     @patch("main.feedparser.parse")
     def test_summary_truncated_to_500_chars(self, mock_parse):
@@ -443,6 +455,87 @@ class TestArticleCache(unittest.TestCase):
         # A fresh DB initialized by setUp should be queryable
         result = is_cached("https://example.com/anything", db_path=self.db)
         self.assertFalse(result)
+
+
+# ---------------------------------------------------------------------------
+# 8. Article Scraping
+# ---------------------------------------------------------------------------
+
+class TestScrapeArticle(unittest.TestCase):
+
+    @patch("main.requests.get")
+    def test_returns_text_from_paragraphs(self, mock_get):
+        html = """<html><body>
+            <p>This is a long enough paragraph about AI in banking fraud detection systems.</p>
+            <p>Another substantial paragraph discussing risk management and compliance tools.</p>
+        </body></html>"""
+        mock_response = MagicMock()
+        mock_response.text = html
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        result = scrape_article("https://example.com/article")
+        self.assertIsNotNone(result)
+        self.assertIn("AI in banking", result)
+
+    @patch("main.requests.get")
+    def test_strips_script_and_nav_tags(self, mock_get):
+        html = """<html><body>
+            <nav>Home | About | Contact</nav>
+            <script>alert('test')</script>
+            <p>This is meaningful article content about AI fraud detection in banking.</p>
+        </body></html>"""
+        mock_response = MagicMock()
+        mock_response.text = html
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        result = scrape_article("https://example.com/article")
+        self.assertNotIn("alert", result)
+        self.assertIn("meaningful article content", result)
+
+    @patch("main.requests.get")
+    def test_respects_max_chars_limit(self, mock_get):
+        long_text = "A" * 5000
+        html = f"<html><body><p>{long_text}</p></body></html>"
+        mock_response = MagicMock()
+        mock_response.text = html
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        result = scrape_article("https://example.com/article", max_chars=500)
+        self.assertLessEqual(len(result), 500)
+
+    @patch("main.requests.get", side_effect=Exception("Connection error"))
+    def test_returns_none_on_request_failure(self, mock_get):
+        result = scrape_article("https://example.com/article")
+        self.assertIsNone(result)
+
+    @patch("main.requests.get")
+    def test_returns_none_when_no_paragraphs(self, mock_get):
+        html = "<html><body><div>No paragraphs here</div></body></html>"
+        mock_response = MagicMock()
+        mock_response.text = html
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        result = scrape_article("https://example.com/article")
+        self.assertIsNone(result)
+
+    @patch("main.requests.get")
+    def test_skips_short_paragraphs(self, mock_get):
+        html = """<html><body>
+            <p>Short.</p>
+            <p>This is a sufficiently long paragraph with meaningful content about AI and banking systems.</p>
+        </body></html>"""
+        mock_response = MagicMock()
+        mock_response.text = html
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        result = scrape_article("https://example.com/article")
+        self.assertNotIn("Short.", result)
+        self.assertIn("sufficiently long paragraph", result)
 
 
 # ---------------------------------------------------------------------------

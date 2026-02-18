@@ -586,12 +586,13 @@ Edit `config.yaml` — no code changes needed. The agent picks up changes on the
 | Docker support | Run agent in isolated container; portable deployment | ✅ Done (v1.1) |
 | Multiple email recipients | Digest delivered to comma/semicolon separated addresses | ✅ Done (v1.2) |
 | SQLite article cache | Avoids re-processing seen articles; saves Groq API calls | ✅ Done (v1.3) |
+| Full article scraping | Richer summaries from full article text via requests + BeautifulSoup | ✅ Done (v1.4) |
 
 ### Potential Future Enhancements
 
 | Enhancement | Benefit |
 |---|---|
-| Full article scraping | Richer summaries beyond RSS excerpt |
+| ~~Full article scraping~~ | ~~Richer summaries beyond RSS excerpt~~ |
 | Multi-user support | Each user gets a personalized digest |
 | Web UI for config | Non-technical users can manage feeds and topics |
 | Slack/Teams delivery | Alternative to email |
