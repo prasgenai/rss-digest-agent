@@ -576,16 +576,21 @@ Edit `config.yaml` — no code changes needed. The agent picks up changes on the
 
 | Limitation | Description |
 |---|---|
-| No deduplication | Same article appearing in multiple feeds will be processed twice |
-| No article memory | Previously seen articles are re-fetched if still within 24 hours |
 | Plain text fallback only | If Groq is down, email is not sent |
 | No web scraping | Only RSS-provided summaries are used, not full article content |
+
+### Implemented Enhancements
+
+| Enhancement | Benefit | Status |
+|---|---|---|
+| Docker support | Run agent in isolated container; portable deployment | ✅ Done (v1.1) |
+| Multiple email recipients | Digest delivered to comma/semicolon separated addresses | ✅ Done (v1.2) |
+| SQLite article cache | Avoids re-processing seen articles; saves Groq API calls | ✅ Done (v1.3) |
 
 ### Potential Future Enhancements
 
 | Enhancement | Benefit |
 |---|---|
-| SQLite article cache | Avoid re-processing seen articles |
 | Full article scraping | Richer summaries beyond RSS excerpt |
 | Multi-user support | Each user gets a personalized digest |
 | Web UI for config | Non-technical users can manage feeds and topics |
