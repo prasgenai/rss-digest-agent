@@ -223,6 +223,17 @@ class TestFilterRelevantArticles(unittest.TestCase):
         result = filter_relevant_articles(articles, ["AI in Finance"])
         self.assertEqual(result, [])
 
+    @patch("main.time.sleep")
+    @patch("main.client")
+    def test_relevant_true_but_score_below_threshold_filtered_out(self, mock_client, mock_sleep):
+        # LLM marks relevant=true but score=6 — both conditions must pass (score >= 7 required)
+        mock_client.chat.completions.create.return_value = make_groq_response(
+            '[{"id": 1, "score": 6, "relevant": true}]'
+        )
+        articles = [make_article("Borderline Article")]
+        result = filter_relevant_articles(articles, ["AI in Finance"])
+        self.assertEqual(len(result), 0)
+
 
 # ---------------------------------------------------------------------------
 # 4. summarize_articles
@@ -313,6 +324,11 @@ class TestCompileDigest(unittest.TestCase):
         articles = [make_article(with_bullets=True)]
         html = compile_digest(articles, ["AI in Finance"])
         self.assertIn('href="https://example.com/article"', html)
+
+    def test_low_score_uses_orange_color(self):
+        articles = [make_article(score=5, with_bullets=True)]
+        html = compile_digest(articles, ["AI in Finance"])
+        self.assertIn("#fd7e14", html)
 
 
 # ---------------------------------------------------------------------------
@@ -743,6 +759,53 @@ class TestMainMultiUser(unittest.TestCase):
         main()
         # 'scraped' flag set after first group prevents re-scraping for second group
         mock_scrape.assert_called_once()
+
+    @patch("main.add_to_cache")
+    @patch("main.is_cached", return_value=False)
+    @patch("main.purge_expired")
+    @patch("main.init_cache")
+    @patch("main.send_email")
+    @patch("main.compile_digest", return_value="<html></html>")
+    @patch("main.summarize_articles", side_effect=lambda x: x)
+    @patch("main.filter_relevant_articles", return_value=[])
+    @patch("main.fetch_articles")
+    @patch("main.load_config")
+    def test_add_to_cache_receives_only_fresh_urls(
+        self, mock_load, mock_fetch, mock_filter, mock_summarize,
+        mock_compile, mock_send, mock_init, mock_purge, mock_cached, mock_cache
+    ):
+        # 2 articles fetched; only 1 is fresh (is_cached returns True for first, False for second)
+        article_cached = {"link": "https://example.com/old", "title": "Old", "summary": "S", "published": "2026-02-17", "source": "Src"}
+        article_fresh  = {"link": "https://example.com/new", "title": "New", "summary": "S", "published": "2026-02-18", "source": "Src"}
+        mock_fetch.return_value = [article_cached, article_fresh]
+        mock_cached.side_effect = lambda url: url == "https://example.com/old"
+        mock_load.return_value = self._make_config_multi_user()
+        main()
+        cached_urls = mock_cache.call_args[0][0]
+        self.assertIn("https://example.com/new", cached_urls)
+        self.assertNotIn("https://example.com/old", cached_urls)
+
+    @patch("main.add_to_cache")
+    @patch("main.is_cached", return_value=False)
+    @patch("main.purge_expired")
+    @patch("main.init_cache")
+    @patch("main.send_email")
+    @patch("main.compile_digest", return_value="<html></html>")
+    @patch("main.summarize_articles", side_effect=lambda x: x)
+    @patch("main.scrape_article")
+    @patch("main.filter_relevant_articles", return_value=[])
+    @patch("main.fetch_articles", return_value=[])
+    @patch("main.load_config")
+    def test_scrape_article_not_called_when_scraping_disabled(
+        self, mock_load, mock_fetch, mock_filter, mock_scrape,
+        mock_summarize, mock_compile, mock_send, mock_init,
+        mock_purge, mock_cached, mock_cache
+    ):
+        config = self._make_config_multi_user()
+        config["scraping"] = {"enabled": False}
+        mock_load.return_value = config
+        main()
+        mock_scrape.assert_not_called()
 
     @patch("main.add_to_cache")
     @patch("main.is_cached", return_value=False)
