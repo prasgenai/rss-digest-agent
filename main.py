@@ -203,16 +203,21 @@ def compile_digest(articles, topics):
 
 
 def send_email(html_content, subject, from_email, to_email, app_password):
-    """Send HTML email via Gmail SMTP."""
+    """Send HTML email via Gmail SMTP.
+
+    to_email supports multiple addresses separated by comma or semicolon.
+    Example: 'a@gmail.com,b@gmail.com' or 'a@gmail.com;b@gmail.com'
+    """
+    recipients = [r.strip() for r in re.split(r"[,;]", to_email) if r.strip()]
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = from_email
-    msg["To"] = to_email
+    msg["To"] = ", ".join(recipients)
     msg.attach(MIMEText(html_content, "html"))
 
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
         server.login(from_email, app_password)
-        server.sendmail(from_email, to_email, msg.as_string())
+        server.sendmail(from_email, recipients, msg.as_string())
 
 
 def main():

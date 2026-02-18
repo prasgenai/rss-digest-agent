@@ -64,10 +64,13 @@ GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 # The Gmail address the digest will be sent FROM
 GMAIL_FROM=your_email@gmail.com
 
-# ── Digest Recipient ───────────────────────────────────────
-# The email address the digest will be delivered TO
-# Can be the same as GMAIL_FROM or a different address
+# ── Digest Recipient(s) ────────────────────────────────────
+# The email address(es) the digest will be delivered TO
+# Can be the same as GMAIL_FROM or different addresses
+# Supports multiple recipients separated by comma or semicolon
 GMAIL_TO=your_email@gmail.com
+# GMAIL_TO=person1@gmail.com,person2@gmail.com
+# GMAIL_TO=person1@gmail.com;person2@gmail.com;person3@gmail.com
 
 # ── Gmail App Password ─────────────────────────────────────
 # NOT your Gmail login password — a separate 16-char app password
