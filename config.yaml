@@ -35,6 +35,9 @@ scraping:
   max_chars: 2000        # maximum characters to use from scraped article content
   timeout_seconds: 10    # seconds to wait before giving up on a page load
 
+sentiment:
+  enabled: true          # set to false to skip sentiment analysis
+
 feeds:
   # Finance & Banking AI
   - https://www.finextra.com/rss/channel.aspx

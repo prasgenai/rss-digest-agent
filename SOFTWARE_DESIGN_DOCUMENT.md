@@ -3,7 +3,7 @@
 
 | Field         | Details                          |
 |---------------|----------------------------------|
-| Document Ver  | 1.5.1                            |
+| Document Ver  | 1.6                              |
 | Date          | February 2026                    |
 | Author        | Prashant                         |
 | Status        | Released                         |
@@ -212,6 +212,7 @@ main.py
   │     ├── filter_relevant()      calls Groq API (batched, 5 articles/call)
   │     ├── scrape_article()       fetches full article text (requests + BS4)
   │     ├── summarize_articles()   calls Groq API (batched, 5 articles/call)
+  │     ├── analyze_sentiment()    calls Groq API (batched, 5 articles/call)
   │     ├── compile_digest()       pure Python HTML builder
   │     └── send_email()           calls smtplib → Gmail SMTP
   │
@@ -435,6 +436,14 @@ All dependencies are **open source**. No proprietary libraries.
 - **Output:** Dict with `feeds`, `topics` (fallback), and optionally `users`
 - **Error handling:** Raises exception if file not found
 
+### `analyze_sentiment(articles)`
+- **Input:** List of summarized article dicts (with `bullets` field populated)
+- **Output:** Same list with `sentiment` field added: `"Positive"`, `"Negative"`, or `"Neutral"`
+- **Batching:** 5 articles per LLM call
+- **Validation:** Invalid LLM values normalized to `"Neutral"`
+- **Fallback:** On API error, all articles in the batch receive `"Neutral"` via `setdefault`
+- **Rate limit:** 1 second sleep between batches
+
 ### `resolve_users(config)`
 - **Input:** Parsed config dict
 - **Output:** List of user dicts, each with `name`, `emails`, and `topics`
@@ -484,7 +493,8 @@ All dependencies are **open source**. No proprietary libraries.
     "published": str,        # Date string: "YYYY-MM-DD" or "Unknown"
     "source": str,           # Feed/publication name
     "relevance_score": int,  # Added by filter step: 1–10
-    "bullets": str           # Added by summarize step: 3 bullet points
+    "bullets": str,          # Added by summarize step: 3 bullet points
+    "sentiment": str         # Added by sentiment step: "Positive", "Negative", or "Neutral"
 }
 ```
 
@@ -505,6 +515,9 @@ topics:
 
 feeds:
   - string    # Valid RSS/Atom feed URL
+
+sentiment:
+  enabled: bool   # true to classify articles; false to skip (default: true)
 ```
 
 ### Environment Variables (`.env`)
@@ -606,6 +619,7 @@ Edit `config.yaml` — no code changes needed. The agent picks up changes on the
 | SQLite article cache | Avoids re-processing seen articles; saves Groq API calls | ✅ Done (v1.3) |
 | Full article scraping | Richer summaries from full article text via requests + BeautifulSoup | ✅ Done (v1.4) |
 | Multi-user personalized digests | Each user group gets its own topics, recipients, and digest email; shared fetch phase | ✅ Done (v1.5) |
+| Sentiment analysis | Each article classified as Positive/Negative/Neutral; colour-coded badge in email digest | ✅ Done (v1.6) |
 
 ### Potential Future Enhancements
 
@@ -613,12 +627,12 @@ Edit `config.yaml` — no code changes needed. The agent picks up changes on the
 |---|---|
 | ~~Full article scraping~~ | ~~Richer summaries beyond RSS excerpt~~ |
 | ~~Multi-user support~~ | ~~Each user gets a personalized digest~~ |
+| ~~Sentiment analysis~~ | ~~Flag positive vs negative news per topic~~ |
 | Web UI for config | Non-technical users can manage feeds and topics |
 | Slack/Teams delivery | Alternative to email |
 | Weekly digest mode | Longer lookback window option |
-| Sentiment analysis | Flag positive vs negative news per topic |
 
 ---
 
-*Document generated for RSS Research Digest Agent v1.5.1*
+*Document generated for RSS Research Digest Agent v1.6*
 *All technologies used are open source.*

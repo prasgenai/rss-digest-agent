@@ -31,7 +31,7 @@ rss-digest-agent/
 ├── Dockerfile        # Docker container definition
 ├── requirements.txt  # Python dependencies
 ├── main.py           # Main agent logic
-├── test_main.py      # Unit tests (62 tests)
+├── test_main.py      # Unit tests (72 tests)
 └── README.md
 ```
 
@@ -163,6 +163,24 @@ feeds:
 ```
 
 To find the RSS feed URL for any website, look for an RSS icon or append `/feed` or `/rss` to the site URL.
+
+---
+
+## Sentiment Analysis
+
+When enabled, each article in the digest is classified as **Positive**, **Negative**, or **Neutral** based on its implications for finance and technology professionals. The sentiment label appears colour-coded in the email next to the relevance score.
+
+Configure in `config.yaml`:
+
+```yaml
+sentiment:
+  enabled: true   # set to false to skip sentiment analysis
+```
+
+- Runs after summarization — uses bullet points for more accurate classification
+- Invalid or unrecognised LLM responses default to Neutral
+- If the Groq API call fails, all articles in the affected batch are set to Neutral
+- Set `enabled: false` for faster runs when sentiment is not needed
 
 ---
 
