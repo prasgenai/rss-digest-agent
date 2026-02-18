@@ -1,0 +1,7 @@
+.env
+.git
+__pycache__/
+*.pyc
+test_main.py
+README.md
+SOFTWARE_DESIGN_DOCUMENT.md
