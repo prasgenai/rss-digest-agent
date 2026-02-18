@@ -320,7 +320,7 @@ class TestSendEmail(unittest.TestCase):
         mock_server.sendmail.assert_called_once()
         args = mock_server.sendmail.call_args[0]
         self.assertEqual(args[0], "sender@gmail.com")
-        self.assertEqual(args[1], "receiver@gmail.com")
+        self.assertEqual(args[1], ["receiver@gmail.com"])
 
     @patch("main.smtplib.SMTP_SSL")
     def test_uses_ssl_on_port_465(self, mock_smtp_class):
@@ -331,6 +331,54 @@ class TestSendEmail(unittest.TestCase):
         send_email("<html></html>", "Subject", "a@gmail.com", "b@gmail.com", "pwd")
 
         mock_smtp_class.assert_called_once_with("smtp.gmail.com", 465)
+
+    @patch("main.smtplib.SMTP_SSL")
+    def test_comma_separated_recipients(self, mock_smtp_class):
+        mock_server = MagicMock()
+        mock_smtp_class.return_value.__enter__ = MagicMock(return_value=mock_server)
+        mock_smtp_class.return_value.__exit__ = MagicMock(return_value=False)
+
+        send_email("<html></html>", "Subject", "a@gmail.com", "b@gmail.com,c@gmail.com", "pwd")
+
+        args = mock_server.sendmail.call_args[0]
+        self.assertIn("b@gmail.com", args[1])
+        self.assertIn("c@gmail.com", args[1])
+
+    @patch("main.smtplib.SMTP_SSL")
+    def test_semicolon_separated_recipients(self, mock_smtp_class):
+        mock_server = MagicMock()
+        mock_smtp_class.return_value.__enter__ = MagicMock(return_value=mock_server)
+        mock_smtp_class.return_value.__exit__ = MagicMock(return_value=False)
+
+        send_email("<html></html>", "Subject", "a@gmail.com", "b@gmail.com;c@gmail.com;d@gmail.com", "pwd")
+
+        args = mock_server.sendmail.call_args[0]
+        self.assertIn("b@gmail.com", args[1])
+        self.assertIn("c@gmail.com", args[1])
+        self.assertIn("d@gmail.com", args[1])
+
+    @patch("main.smtplib.SMTP_SSL")
+    def test_whitespace_around_recipients_handled(self, mock_smtp_class):
+        mock_server = MagicMock()
+        mock_smtp_class.return_value.__enter__ = MagicMock(return_value=mock_server)
+        mock_smtp_class.return_value.__exit__ = MagicMock(return_value=False)
+
+        send_email("<html></html>", "Subject", "a@gmail.com", " b@gmail.com , c@gmail.com ", "pwd")
+
+        args = mock_server.sendmail.call_args[0]
+        self.assertIn("b@gmail.com", args[1])
+        self.assertIn("c@gmail.com", args[1])
+
+    @patch("main.smtplib.SMTP_SSL")
+    def test_single_recipient_still_works(self, mock_smtp_class):
+        mock_server = MagicMock()
+        mock_smtp_class.return_value.__enter__ = MagicMock(return_value=mock_server)
+        mock_smtp_class.return_value.__exit__ = MagicMock(return_value=False)
+
+        send_email("<html></html>", "Subject", "a@gmail.com", "b@gmail.com", "pwd")
+
+        args = mock_server.sendmail.call_args[0]
+        self.assertEqual(args[1], ["b@gmail.com"])
 
 
 # ---------------------------------------------------------------------------
