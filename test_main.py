@@ -24,6 +24,7 @@ from main import (
     purge_expired,
     scrape_article,
     resolve_users,
+    group_name_to_env_key,
     analyze_sentiment,
     main,
 )
@@ -634,13 +635,29 @@ class TestAnalyzeSentiment(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
+class TestGroupNameToEnvKey(unittest.TestCase):
+
+    def test_simple_two_word_name(self):
+        self.assertEqual(group_name_to_env_key("Finance Team"), "FINANCE_TEAM_EMAILS")
+
+    def test_three_word_name(self):
+        self.assertEqual(group_name_to_env_key("Technology Team"), "TECHNOLOGY_TEAM_EMAILS")
+
+    def test_hyphenated_name(self):
+        self.assertEqual(group_name_to_env_key("A-Level Students"), "A_LEVEL_STUDENTS_EMAILS")
+
+    def test_single_word_name(self):
+        self.assertEqual(group_name_to_env_key("Default"), "DEFAULT_EMAILS")
+
+
 class TestResolveUsers(unittest.TestCase):
 
+    @patch.dict(os.environ, {"FINANCE_TEAM_EMAILS": "a@gmail.com", "TECH_TEAM_EMAILS": "b@gmail.com"})
     def test_returns_users_list_when_users_key_present(self):
         config = {
             "users": [
-                {"name": "Finance Team", "emails": ["a@gmail.com"], "topics": ["Finance AI"]},
-                {"name": "Tech Team", "emails": ["b@gmail.com"], "topics": ["Dev AI"]},
+                {"name": "Finance Team", "topics": ["Finance AI"]},
+                {"name": "Tech Team", "topics": ["Dev AI"]},
             ],
             "feeds": [],
         }
@@ -670,10 +687,11 @@ class TestResolveUsers(unittest.TestCase):
         self.assertIn("a@gmail.com", result[0]["emails"])
         self.assertIn("b@gmail.com", result[0]["emails"])
 
+    @patch.dict(os.environ, {"TEAM_A_EMAILS": "a@gmail.com"})
     def test_users_key_takes_precedence_over_topics(self):
         config = {
             "users": [
-                {"name": "Team A", "emails": ["a@gmail.com"], "topics": ["Topic A"]},
+                {"name": "Team A", "topics": ["Topic A"]},
             ],
             "topics": ["Old Topic"],
             "feeds": [],
@@ -682,11 +700,12 @@ class TestResolveUsers(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["topics"], ["Topic A"])
 
+    @patch.dict(os.environ, {"FINANCE_TEAM_EMAILS": "a@gmail.com", "TECH_TEAM_EMAILS": "b@gmail.com"})
     def test_each_user_has_required_keys(self):
         config = {
             "users": [
-                {"name": "Finance Team", "emails": ["a@gmail.com"], "topics": ["Finance AI"]},
-                {"name": "Tech Team", "emails": ["b@gmail.com"], "topics": ["Dev AI"]},
+                {"name": "Finance Team", "topics": ["Finance AI"]},
+                {"name": "Tech Team", "topics": ["Dev AI"]},
             ],
             "feeds": [],
         }
@@ -703,6 +722,36 @@ class TestResolveUsers(unittest.TestCase):
         result = resolve_users(config)
         self.assertEqual(result[0]["topics"], topics)
 
+    @patch.dict(os.environ, {"FINANCE_TEAM_EMAILS": "a@gmail.com,b@gmail.com"})
+    def test_emails_read_from_env_var_for_group(self):
+        config = {
+            "users": [{"name": "Finance Team", "topics": ["Finance AI"]}],
+            "feeds": [],
+        }
+        result = resolve_users(config)
+        self.assertIn("a@gmail.com", result[0]["emails"])
+        self.assertIn("b@gmail.com", result[0]["emails"])
+
+    @patch.dict(os.environ, {"FINANCE_TEAM_EMAILS": "a@gmail.com;b@gmail.com"})
+    def test_emails_semicolon_separated_in_env_var(self):
+        config = {
+            "users": [{"name": "Finance Team", "topics": ["Finance AI"]}],
+            "feeds": [],
+        }
+        result = resolve_users(config)
+        self.assertIn("a@gmail.com", result[0]["emails"])
+        self.assertIn("b@gmail.com", result[0]["emails"])
+
+    def test_missing_env_var_yields_empty_emails(self):
+        config = {
+            "users": [{"name": "Orphan Group", "topics": ["Some Topic"]}],
+            "feeds": [],
+        }
+        # Ensure env var is absent
+        os.environ.pop("ORPHAN_GROUP_EMAILS", None)
+        result = resolve_users(config)
+        self.assertEqual(result[0]["emails"], [])
+
 
 # ---------------------------------------------------------------------------
 # 11. main() — multi-user integration
@@ -716,10 +765,22 @@ class TestMainMultiUser(unittest.TestCase):
             "cache": {"expiry_days": 7},
             "scraping": {"enabled": False},
             "users": [
-                {"name": "Finance Team", "emails": ["finance@gmail.com"], "topics": ["Finance AI"]},
-                {"name": "Technology Team", "emails": ["tech@gmail.com"], "topics": ["Dev AI"]},
+                {"name": "Finance Team", "topics": ["Finance AI"]},
+                {"name": "Technology Team", "topics": ["Dev AI"]},
             ],
         }
+
+    _multi_user_emails = {
+        "FINANCE_TEAM_EMAILS": "finance@gmail.com",
+        "TECHNOLOGY_TEAM_EMAILS": "tech@gmail.com",
+    }
+
+    def setUp(self):
+        self._env_patch = patch.dict(os.environ, self._multi_user_emails)
+        self._env_patch.start()
+
+    def tearDown(self):
+        self._env_patch.stop()
 
     def _make_config_single_user(self):
         return {

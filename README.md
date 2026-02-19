@@ -64,13 +64,20 @@ GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 # The Gmail address the digest will be sent FROM
 GMAIL_FROM=your_email@gmail.com
 
-# ── Digest Recipient(s) ────────────────────────────────────
-# The email address(es) the digest will be delivered TO
-# Can be the same as GMAIL_FROM or different addresses
+# ── Digest Recipient(s) — single-user mode ──────────────────
+# Used only when 'users:' is absent from config.yaml
 # Supports multiple recipients separated by comma or semicolon
 GMAIL_TO=your_email@gmail.com
 # GMAIL_TO=person1@gmail.com,person2@gmail.com
 # GMAIL_TO=person1@gmail.com;person2@gmail.com;person3@gmail.com
+
+# ── Per-group recipient emails — multi-user mode ─────────────
+# One env var per user group defined in config.yaml.
+# Name is derived from the group name: uppercase, spaces/hyphens
+# replaced with underscores, _EMAILS appended.
+# FINANCE_TEAM_EMAILS=person1@gmail.com,person2@gmail.com
+# TECHNOLOGY_TEAM_EMAILS=tech@gmail.com
+# A_LEVEL_STUDENTS_EMAILS=student@gmail.com
 
 # ── Gmail App Password ─────────────────────────────────────
 # NOT your Gmail login password — a separate 16-char app password
@@ -89,29 +96,32 @@ Edit `config.yaml` to add/remove RSS feeds or change the topics the AI filters f
 
 The agent supports multiple user groups, each with their own topics and email recipients. RSS feeds are fetched **once** and shared; filtering, summarization, and email delivery happen independently per group.
 
-Add a `users:` block in `config.yaml`:
+Add a `users:` block in `config.yaml` (topics only — no emails):
 
 ```yaml
 users:
   - name: Finance Team
-    emails:
-      - person1@gmail.com
-      - person2@gmail.com
     topics:
       - AI use cases for Finance Department in a bank
       - Regulatory technology and compliance automation
 
   - name: Technology Team
-    emails:
-      - tech@gmail.com
     topics:
       - AI and Claude for software development
       - Open source AI models and LLM infrastructure
 ```
 
-- When `users:` is present, `GMAIL_TO` is ignored — recipients are defined per group in `config.yaml`
+Then add the corresponding email env vars to `.env`. The env var name is derived from the group name — uppercase, spaces/hyphens replaced with underscores, `_EMAILS` appended:
+
+```env
+FINANCE_TEAM_EMAILS=person1@gmail.com,person2@gmail.com
+TECHNOLOGY_TEAM_EMAILS=tech@gmail.com
+```
+
+- When `users:` is present, `GMAIL_TO` is ignored — recipients come from per-group env vars in `.env`
 - When `users:` is absent, the agent falls back to single-user mode using `GMAIL_TO` and `topics:` from `config.yaml`
 - Each group receives a digest with its own subject line: `AI Research Digest (Finance Team) - 2026-02-18`
+- Keeping emails in `.env` (not `config.yaml`) ensures recipient addresses are never committed to version control
 
 ---
 
@@ -256,5 +266,6 @@ rm digest_cache.db
 ## Security Notes
 
 - Never commit `.env` to git (already excluded via `.gitignore`)
+- Recipient email addresses (per-group `*_EMAILS` vars) live in `.env`, not `config.yaml`, so they are never committed to version control
 - Rotate your Groq API key and Gmail App Password periodically
 - The Gmail App Password grants access only to Gmail — not your Google account password

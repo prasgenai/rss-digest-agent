@@ -97,13 +97,29 @@ def load_config(path="config.yaml"):
         return yaml.safe_load(f)
 
 
+def group_name_to_env_key(name):
+    """Derive env var key from a user group name.
+
+    Examples:
+        'Finance Team'     -> 'FINANCE_TEAM_EMAILS'
+        'A-Level Students' -> 'A_LEVEL_STUDENTS_EMAILS'
+    """
+    return re.sub(r"[^A-Z0-9]", "_", name.upper()) + "_EMAILS"
+
+
 def resolve_users(config):
     """Return list of user dicts from config.
-    Multi-user mode: uses config['users'].
+    Multi-user mode: uses config['users'], with emails read from env vars.
     Single-user fallback: builds one user from config['topics'] + GMAIL_TO env var.
     """
     if "users" in config:
-        return config["users"]
+        users = []
+        for user in config["users"]:
+            env_key = group_name_to_env_key(user["name"])
+            emails_str = os.getenv(env_key, "")
+            emails = [e.strip() for e in re.split(r"[,;]", emails_str) if e.strip()]
+            users.append({"name": user["name"], "emails": emails, "topics": user["topics"]})
+        return users
     gmail_to = os.getenv("GMAIL_TO", "")
     return [{
         "name": "Default",

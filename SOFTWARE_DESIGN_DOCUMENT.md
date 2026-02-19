@@ -3,7 +3,7 @@
 
 | Field         | Details                          |
 |---------------|----------------------------------|
-| Document Ver  | 1.6                              |
+| Document Ver  | 1.6.1                            |
 | Date          | February 2026                    |
 | Author        | Prashant                         |
 | Status        | Released                         |
@@ -193,8 +193,8 @@ User clicks links to read full articles of interest
 
  CONFIG LAYER
  ─────────────
- config.yaml  ──► topics, feed URLs
- .env         ──► API keys, email credentials
+ config.yaml  ──► topics, feed URLs (no email addresses)
+ .env         ──► API keys, sender credentials, per-group recipient emails
 ```
 
 ### Component Interaction
@@ -444,10 +444,15 @@ All dependencies are **open source**. No proprietary libraries.
 - **Fallback:** On API error, all articles in the batch receive `"Neutral"` via `setdefault`
 - **Rate limit:** 1 second sleep between batches
 
+### `group_name_to_env_key(name)`
+- **Input:** Group display name string (e.g. `'Finance Team'`)
+- **Output:** Env var key string (e.g. `'FINANCE_TEAM_EMAILS'`)
+- Uppercases the name and replaces any non-alphanumeric characters with `_`
+
 ### `resolve_users(config)`
 - **Input:** Parsed config dict
 - **Output:** List of user dicts, each with `name`, `emails`, and `topics`
-- **Multi-user mode:** Returns `config['users']` when `users` key is present
+- **Multi-user mode:** When `users` key is present, derives each group's recipient emails from an env var (via `group_name_to_env_key`); emails are never read from `config.yaml`
 - **Single-user fallback:** Builds one user from `config['topics']` + `GMAIL_TO` env var (comma/semicolon separated)
 
 ### `fetch_articles(feeds, hours=24)`
@@ -502,10 +507,9 @@ All dependencies are **open source**. No proprietary libraries.
 
 ```yaml
 # Multi-user mode (optional — takes precedence over 'topics' when present)
+# Recipient emails are NOT stored here; see .env vars below.
 users:
   - name: string         # Display name for the group
-    emails:
-      - string           # Recipient email addresses
     topics:
       - string           # Topics for this group
 
@@ -525,8 +529,18 @@ sentiment:
 ```
 GROQ_API_KEY          # Groq cloud API key
 GMAIL_FROM            # Sender Gmail address
-GMAIL_TO              # Recipient email address
 GMAIL_APP_PASSWORD    # 16-character Gmail App Password (no spaces)
+
+# Single-user mode (used when 'users:' is absent from config.yaml)
+GMAIL_TO              # Recipient address(es), comma/semicolon separated
+
+# Multi-user mode — one var per group in config.yaml
+# Name derived from group name: uppercase, spaces/hyphens → '_', + _EMAILS
+# Example for group named 'Finance Team':
+FINANCE_TEAM_EMAILS   # Recipient address(es) for this group
+TECHNOLOGY_TEAM_EMAILS
+A_LEVEL_STUDENTS_EMAILS
+# ... one per group
 ```
 
 ---
@@ -620,6 +634,7 @@ Edit `config.yaml` — no code changes needed. The agent picks up changes on the
 | Full article scraping | Richer summaries from full article text via requests + BeautifulSoup | ✅ Done (v1.4) |
 | Multi-user personalized digests | Each user group gets its own topics, recipients, and digest email; shared fetch phase | ✅ Done (v1.5) |
 | Sentiment analysis | Each article classified as Positive/Negative/Neutral; colour-coded badge in email digest | ✅ Done (v1.6) |
+| Security: emails to .env | Move per-group recipient emails from config.yaml to .env to prevent PII in version control | ✅ Done (v1.6.1) |
 
 ### Potential Future Enhancements
 
@@ -634,5 +649,5 @@ Edit `config.yaml` — no code changes needed. The agent picks up changes on the
 
 ---
 
-*Document generated for RSS Research Digest Agent v1.6*
+*Document generated for RSS Research Digest Agent v1.6.1*
 *All technologies used are open source.*
