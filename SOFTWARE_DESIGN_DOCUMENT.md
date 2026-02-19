@@ -3,7 +3,7 @@
 
 | Field         | Details                          |
 |---------------|----------------------------------|
-| Document Ver  | 1.7                              |
+| Document Ver  | 1.7.1                            |
 | Date          | February 2026                    |
 | Author        | Prashant                         |
 | Status        | Released                         |
@@ -636,6 +636,7 @@ Edit `config.yaml` — no code changes needed. The agent picks up changes on the
 | Sentiment analysis | Each article classified as Positive/Negative/Neutral; colour-coded badge in email digest | ✅ Done (v1.6) |
 | Security: emails to .env | Move per-group recipient emails from config.yaml to .env to prevent PII in version control | ✅ Done (v1.6.1) |
 | Topic-aware summarization | summarize_articles() now accepts topics; prompt tailored per user group; full scraped content used (no 400-char truncation) | ✅ Done (v1.7) |
+| Proprietary license | Replace CC BY-NC-ND 4.0 (incompatible with software) with a proprietary All Rights Reserved license | ✅ Done (v1.7.1) |
 
 ### Potential Future Enhancements
 
@@ -650,5 +651,5 @@ Edit `config.yaml` — no code changes needed. The agent picks up changes on the
 
 ---
 
-*Document generated for RSS Research Digest Agent v1.7*
+*Document generated for RSS Research Digest Agent v1.7.1*
 *All technologies used are open source.*
