@@ -1,5 +1,8 @@
 # RSS Research Digest Agent
 
+[![License: CC BY-NC-ND 4.0](https://img.shields.io/badge/License-CC%20BY--NC--ND%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-nd/4.0/)
+[![Built with Claude Code](https://img.shields.io/badge/Built%20with-Claude%20Code-orange?logo=anthropic)](https://claude.ai/claude-code)
+
 An agentic app that fetches articles from RSS feeds, filters them by topic using AI, summarizes them into bullet points, and emails you a daily digest.
 
 **Powered by:** Groq (Llama 3.3) · feedparser · Gmail SMTP
@@ -269,3 +272,19 @@ rm digest_cache.db
 - Recipient email addresses (per-group `*_EMAILS` vars) live in `.env`, not `config.yaml`, so they are never committed to version control
 - Rotate your Groq API key and Gmail App Password periodically
 - The Gmail App Password grants access only to Gmail — not your Google account password
+
+---
+
+## License
+
+Copyright (c) 2026 Prashant. All rights reserved.
+
+This project is licensed under the [Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International License (CC BY-NC-ND 4.0)](https://creativecommons.org/licenses/by-nc-nd/4.0/).
+
+You may view and share this code with attribution. You may **not** use it commercially or distribute modified versions.
+
+---
+
+## Attribution
+
+This project was built with the assistance of [Claude Code](https://claude.ai/claude-code) by Anthropic.
