@@ -1,23 +1,15 @@
 users:
   - name: Finance Team
-    emails:
-      - finance_recipient1@example.com
-      - finance_recipient2@example.com
     topics:
       - AI use cases for Finance Department in a bank (fraud detection, risk management, compliance, financial reporting, forecasting)
       - Regulatory technology (RegTech) and compliance automation in banking
 
   - name: Technology Team
-    emails:
-      - tech_recipient1@example.com
-      - tech_recipient2@example.com
     topics:
       - AI and Claude for software development (coding agents, developer productivity, code review, LLM tooling, agentic workflows)
       - Open source AI models and LLM infrastructure
 
   - name: A-Level Students
-    emails:
-      - student_recipient@example.com
     topics:
       - Singapore and overseas scholarships available to pre-university students studying in Singapore under the A-Level curriculum (local university scholarships, government scholarships, international university scholarships)
       - Scholarship application deadlines and tips for pre-university A-Level students in Singapore applying to local and overseas universities
