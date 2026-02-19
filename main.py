@@ -92,7 +92,12 @@ def scrape_article(url, max_chars=2000, timeout=10):
         return None
 
 
-def load_config(path="config.yaml"):
+def load_config(path=None):
+    """Load YAML config. Prefers config.local.yaml (gitignored, user-editable)
+    over config.yaml (version-controlled template) when no path is given.
+    """
+    if path is None:
+        path = "config.local.yaml" if os.path.exists("config.local.yaml") else "config.yaml"
     with open(path) as f:
         return yaml.safe_load(f)
 

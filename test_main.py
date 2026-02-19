@@ -78,6 +78,22 @@ class TestLoadConfig(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             load_config("nonexistent_file.yaml")
 
+    @patch("main.os.path.exists", return_value=True)
+    def test_prefers_config_local_yaml_when_present(self, mock_exists):
+        yaml_content = "topics:\n  - Local Topic\nfeeds:\n  - https://local.example.com/rss\n"
+        with patch("builtins.open", mock_open(read_data=yaml_content)):
+            config = load_config()
+        mock_exists.assert_called_once_with("config.local.yaml")
+        self.assertEqual(config["topics"], ["Local Topic"])
+
+    @patch("main.os.path.exists", return_value=False)
+    def test_falls_back_to_config_yaml_when_local_absent(self, mock_exists):
+        yaml_content = "topics:\n  - Default Topic\nfeeds:\n  - https://example.com/rss\n"
+        with patch("builtins.open", mock_open(read_data=yaml_content)):
+            config = load_config()
+        mock_exists.assert_called_once_with("config.local.yaml")
+        self.assertEqual(config["topics"], ["Default Topic"])
+
 
 # ---------------------------------------------------------------------------
 # 2. fetch_articles

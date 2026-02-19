@@ -27,14 +27,15 @@ An agentic app that fetches articles from RSS feeds, filters them by topic using
 
 ```
 rss-digest-agent/
-├── .env              # API keys and email credentials (never commit this)
-├── .gitignore        # Excludes .env from git
-├── .dockerignore     # Excludes .env and dev files from Docker image
-├── config.yaml       # RSS feeds and topics (edit this to customize)
-├── Dockerfile        # Docker container definition
-├── requirements.txt  # Python dependencies
-├── main.py           # Main agent logic
-├── test_main.py      # Unit tests (72 tests)
+├── .env                  # API keys and email credentials (never commit this)
+├── .gitignore            # Excludes .env, config.local.yaml from git
+├── .dockerignore         # Excludes .env and dev files from Docker image
+├── config.yaml           # Template config — version controlled, safe to commit
+├── config.local.yaml     # Your personal config — gitignored, edit freely
+├── Dockerfile            # Docker container definition
+├── requirements.txt      # Python dependencies
+├── main.py               # Main agent logic
+├── test_main.py          # Unit tests (83 tests)
 └── README.md
 ```
 
@@ -93,13 +94,21 @@ GMAIL_APP_PASSWORD=your16charapppassword
 
 ### 4. Customize topics and feeds
 
-Edit `config.yaml` to add/remove RSS feeds or change the topics the AI filters for.
+Copy `config.yaml` to `config.local.yaml` and edit it freely — it is gitignored so your changes are never committed:
+
+```bash
+cp config.yaml config.local.yaml
+```
+
+Edit `config.local.yaml` to add/remove RSS feeds, change topics, or configure user groups. The app loads `config.local.yaml` if present, otherwise falls back to `config.yaml`.
+
+> **Tip:** Keep `config.yaml` as a clean reference template and make all personal changes in `config.local.yaml`.
 
 ### 5. Configure user groups (optional)
 
 The agent supports multiple user groups, each with their own topics and email recipients. RSS feeds are fetched **once** and shared; filtering, summarization, and email delivery happen independently per group.
 
-Add a `users:` block in `config.yaml` (topics only — no emails):
+Add a `users:` block in `config.local.yaml` (topics only — no emails):
 
 ```yaml
 users:
@@ -122,9 +131,9 @@ TECHNOLOGY_TEAM_EMAILS=tech@gmail.com
 ```
 
 - When `users:` is present, `GMAIL_TO` is ignored — recipients come from per-group env vars in `.env`
-- When `users:` is absent, the agent falls back to single-user mode using `GMAIL_TO` and `topics:` from `config.yaml`
+- When `users:` is absent, the agent falls back to single-user mode using `GMAIL_TO` and `topics:` from the active config
 - Each group receives a digest with its own subject line: `AI Research Digest (Finance Team) - 2026-02-18`
-- Keeping emails in `.env` (not `config.yaml`) ensures recipient addresses are never committed to version control
+- Keeping emails in `.env` (not config files) ensures recipient addresses are never committed to version control
 
 ---
 

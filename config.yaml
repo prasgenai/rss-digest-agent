@@ -1,58 +1,54 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# RSS Research Digest Agent — Configuration Template
+# ─────────────────────────────────────────────────────────────────────────────
+# This file is version-controlled and serves as a reference template.
+#
+# To customise topics, feeds, or user groups WITHOUT affecting git history:
+#   1. Copy this file to config.local.yaml
+#   2. Edit config.local.yaml freely — it is gitignored
+#
+# The app loads config.local.yaml if present, otherwise falls back to this file.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Multi-user mode (optional) ───────────────────────────────────────────────
+# Define user groups with their own topics. Recipient emails are stored in
+# .env (not here) — see README for the naming convention.
+# When this block is present, the 'topics' fallback below is ignored.
 users:
   - name: Finance Team
     topics:
-      - AI use cases for Finance Department in a bank (fraud detection, risk management, compliance, financial reporting, forecasting)
-      - Regulatory technology (RegTech) and compliance automation in banking
+      - AI use cases for Finance Department in a bank
+      - Regulatory technology and compliance automation in banking
 
   - name: Technology Team
     topics:
-      - AI and Claude for software development (coding agents, developer productivity, code review, LLM tooling, agentic workflows)
+      - AI and Claude for software development
       - Open source AI models and LLM infrastructure
 
-  - name: A-Level Students
-    topics:
-      - Singapore and overseas scholarships available to pre-university students studying in Singapore under the A-Level curriculum (local university scholarships, government scholarships, international university scholarships)
-      - Scholarship application deadlines and tips for pre-university A-Level students in Singapore applying to local and overseas universities
-
-# Fallback (used only if 'users' key above is absent)
+# ── Single-user fallback ─────────────────────────────────────────────────────
+# Used only when the 'users' block above is absent.
+# Recipient is taken from GMAIL_TO in .env.
 topics:
-  - AI use cases for Finance Department in a bank (fraud detection, risk management, compliance, financial reporting, forecasting)
-  - AI and Claude for software development (coding agents, developer productivity, code review, LLM tooling, agentic workflows)
+  - AI use cases for Finance Department in a bank
+  - AI and Claude for software development
 
+# ── Cache ────────────────────────────────────────────────────────────────────
 cache:
   expiry_days: 7  # articles seen within this many days will not be reprocessed
 
+# ── Scraping ─────────────────────────────────────────────────────────────────
 scraping:
   enabled: true          # set to false to use RSS excerpts only (faster runs)
   max_chars: 2000        # maximum characters to use from scraped article content
   timeout_seconds: 10    # seconds to wait before giving up on a page load
 
+# ── Sentiment analysis ───────────────────────────────────────────────────────
 sentiment:
   enabled: true          # set to false to skip sentiment analysis
 
+# ── RSS Feeds ────────────────────────────────────────────────────────────────
 feeds:
-  # Finance & Banking AI
-  - https://www.finextra.com/rss/channel.aspx
-  - https://finovate.com/feed/
-  - https://www.fintechfutures.com/feed/
-  - https://www.bankingtech.com/feed/
-  - https://feeds.a.dj.com/rss/RSSMarketsMain.xml
-
-  # AI & Developer Tools
   - https://www.anthropic.com/rss.xml
   - https://github.blog/feed/
   - https://news.ycombinator.com/rss
-  - https://www.deeplearning.ai/the-batch/feed/
   - https://venturebeat.com/category/ai/feed/
-  - https://thenewstack.io/feed/
-
-  # Singapore Scholarships & Education
-  - https://www.scholarshipsguidance.com/feed/
-  - https://sgtutorials.com.sg/feed/
-  - https://www.channelnewsasia.com/rssfeeds/8395986
-  - https://www.straitstimes.com/RSS/singapore
-
-  # International Scholarships & Opportunities
-  - https://opportunitydesk.org/feed/
-  - https://www.scholars4dev.com/feed/
-  - https://afterschoolasia.com/feed/
