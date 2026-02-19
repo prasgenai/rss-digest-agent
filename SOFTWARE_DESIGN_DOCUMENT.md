@@ -684,7 +684,8 @@ Edit `config.yaml` — no code changes needed. The agent picks up changes on the
 | Web UI for config | Non-technical users can manage feeds and topics |
 | Slack/Teams delivery | Alternative to email |
 | Weekly digest mode | Longer lookback window option |
-| Hard scraping timeout | Replace `timeout=N` (single value) with a thread-based wall-clock deadline to guarantee each `scrape_article` call completes within a fixed time regardless of server behaviour; prevents agent hanging for 20+ minutes on a slow-dripping server |
+| Hard scraping timeout (Option A — quick) | Change `requests.get(timeout=N)` to `requests.get(timeout=(N, N))` — the tuple form sets connect timeout and read timeout independently, which handles the vast majority of slow/unresponsive servers with a 1-line change |
+| Hard scraping timeout (Option B — robust) | Wrap `requests.get` in a `concurrent.futures.ThreadPoolExecutor` thread with a hard wall-clock deadline (e.g. `future.result(timeout=N)`); guarantees each `scrape_article` call is killed after exactly N seconds regardless of server behaviour, including the slow-drip case that Option A cannot catch |
 
 ---
 
