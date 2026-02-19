@@ -656,6 +656,7 @@ Edit `config.yaml` — no code changes needed. The agent picks up changes on the
 |---|---|
 | Plain text fallback only | If Groq is down, email is not sent |
 | No web scraping | Only RSS-provided summaries are used, not full article content |
+| Scraping can hang indefinitely | `requests.get(timeout=N)` with a single value caps time *between bytes received*, not total response time. A server that drips data slowly (one packet every N-1 seconds) will never trigger the timeout, causing the agent to hang on that article until the OS closes the connection — which can take 20+ minutes |
 
 ### Implemented Enhancements
 
@@ -683,6 +684,7 @@ Edit `config.yaml` — no code changes needed. The agent picks up changes on the
 | Web UI for config | Non-technical users can manage feeds and topics |
 | Slack/Teams delivery | Alternative to email |
 | Weekly digest mode | Longer lookback window option |
+| Hard scraping timeout | Replace `timeout=N` (single value) with a thread-based wall-clock deadline to guarantee each `scrape_article` call completes within a fixed time regardless of server behaviour; prevents agent hanging for 20+ minutes on a slow-dripping server |
 
 ---
 
