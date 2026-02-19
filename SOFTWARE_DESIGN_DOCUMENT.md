@@ -3,7 +3,7 @@
 
 | Field         | Details                          |
 |---------------|----------------------------------|
-| Document Ver  | 1.8                              |
+| Document Ver  | 1.9                              |
 | Date          | February 2026                    |
 | Author        | Prashant                         |
 | Status        | Released                         |
@@ -436,6 +436,20 @@ All dependencies are **open source**. No proprietary libraries.
 - **Input:** Optional path to YAML file. If omitted, loads `config.local.yaml` if it exists, otherwise falls back to `config.yaml`
 - **Output:** Dict with `feeds`, `topics` (fallback), and optionally `users`
 - **Error handling:** Raises exception if file not found
+- **Path resolution:** When no explicit path is given, candidate paths are anchored to the script's own directory (`_BASE_DIR = os.path.dirname(os.path.abspath(__file__))`), so the agent resolves config files correctly regardless of the working directory from which it is launched
+
+### `validate_config(config)`
+- **Input:** Parsed config dict
+- **Output:** None (raises on invalid config)
+- **Checks:**
+  - `feeds` key must be present and non-empty — raises `ValueError` with a clear message if absent
+  - At least one of `users` or `topics` key must be present — raises `ValueError` otherwise
+- Called in `main()` immediately after `load_config()` so invalid configs fail fast with a human-readable error instead of a cryptic `KeyError` deep in the pipeline
+
+### `scrape_article(url, max_chars, timeout)`
+- **Input:** Article URL plus optional limits
+- **Output:** Scraped article text or `None` on failure
+- **Error handling:** On any exception, prints a warning including the exception type (e.g. `ConnectionError`) so failures are visible in logs, then returns `None`
 
 ### `analyze_sentiment(articles)`
 - **Input:** List of summarized article dicts (with `bullets` field populated)
@@ -444,6 +458,7 @@ All dependencies are **open source**. No proprietary libraries.
 - **Validation:** Invalid LLM values normalized to `"Neutral"`
 - **Fallback:** On API error, all articles in the batch receive `"Neutral"` via `setdefault`
 - **Rate limit:** 1 second sleep between batches
+- **Prompt:** Generic — classifies sentiment "based on its implications for the intended audience"; does not assume a finance/technology audience
 
 ### `group_name_to_env_key(name)`
 - **Input:** Group display name string (e.g. `'Finance Team'`)
@@ -461,6 +476,7 @@ All dependencies are **open source**. No proprietary libraries.
 - **Output:** List of article dicts
 - **Error handling:** Per-feed try/except — one failing feed does not stop others
 - **Article schema:** `{title, link, summary, published, source}`
+- **Lookback:** `hours` is now read from `config.fetch.lookback_hours` (default 24) rather than being hardcoded; configurable in `config.yaml`
 
 ### `filter_relevant_articles(articles, topics)`
 - **Input:** List of article dicts, list of topic strings
@@ -479,11 +495,13 @@ All dependencies are **open source**. No proprietary libraries.
 - **Input:** Summarized article list, topics list
 - **Output:** HTML string (complete email body)
 - **Color coding:** Green (9–10), Blue (7–8), Orange (< 7)
+- **XSS prevention:** Article titles are HTML-escaped via `html.escape()`; links starting with `javascript:` are replaced with `"#"`
 
 ### `send_email(html, subject, from_email, to_email, app_password)`
 - **Input:** HTML body, subject, credentials
 - **Output:** None (side effect: email sent)
 - **Protocol:** SMTP_SSL on port 465
+- **Error handling:** Failures are caught per user group in `main()` — a failed delivery for one group prints a warning but does not abort delivery to remaining groups or prevent the cache from being populated
 
 ---
 
@@ -519,7 +537,18 @@ topics:
   - string    # Natural language topic description
 
 feeds:
-  - string    # Valid RSS/Atom feed URL
+  - string    # Valid RSS/Atom feed URL (required — at least one)
+
+fetch:
+  lookback_hours: int   # Only include articles published within this many hours (default: 24)
+
+cache:
+  expiry_days: int   # Remove cache entries older than this many days (default: 7)
+
+scraping:
+  enabled: bool       # true to fetch full article text; false for RSS excerpts only (default: true)
+  max_chars: int      # Maximum characters to use from scraped article (default: 2000)
+  timeout_seconds: int  # Page load timeout in seconds (default: 10)
 
 sentiment:
   enabled: bool   # true to classify articles; false to skip (default: true)
@@ -613,6 +642,9 @@ Edit `config.yaml` — no code changes needed. The agent picks up changes on the
 | SMTP auth error | App Password incorrect | Regenerate Gmail App Password |
 | Groq API error | Key invalid or rate limit hit | Check key in `.env`; wait 1 min |
 | Email not received | Check spam folder | Add sender to Gmail contacts |
+| Email sent to some groups but not others | Env var not set for that group | Check `.env` for the correct `*_EMAILS` var (e.g. `FINANCE_TEAM_EMAILS`) — a warning is printed in the log for any group with no recipients configured |
+| `Config error:` on startup | Missing `feeds` or `users`/`topics` key | Ensure `config.yaml` (or `config.local.yaml`) has at least one feed URL and either a `users` block or a `topics` list |
+| `Warning: Could not scrape …` in log | Scraping failed for a URL | Site may be paywalled, geo-blocked, or timing out; agent automatically falls back to the RSS excerpt |
 
 ---
 
@@ -639,6 +671,7 @@ Edit `config.yaml` — no code changes needed. The agent picks up changes on the
 | Topic-aware summarization | summarize_articles() now accepts topics; prompt tailored per user group; full scraped content used (no 400-char truncation) | ✅ Done (v1.7) |
 | Proprietary license | Replace CC BY-NC-ND 4.0 (incompatible with software) with a proprietary All Rights Reserved license | ✅ Done (v1.7.1) |
 | config.local.yaml override | Gitignored local config file lets users change topics/feeds/groups freely without touching version-controlled config.yaml | ✅ Done (v1.8) |
+| Bug fixes v1.9 (9 bugs) | Fix SMTP crash skipping remaining groups and breaking cache (HIGH); guard empty recipients; safe feeds access; script-relative config paths; early config validation; scrape warning logging; generic sentiment prompt; HTML-escape titles + sanitize links; configurable lookback_hours | ✅ Done (v1.9) |
 
 ### Potential Future Enhancements
 
@@ -653,5 +686,5 @@ Edit `config.yaml` — no code changes needed. The agent picks up changes on the
 
 ---
 
-*Document generated for RSS Research Digest Agent v1.8*
+*Document generated for RSS Research Digest Agent v1.9*
 *All technologies used are open source.*

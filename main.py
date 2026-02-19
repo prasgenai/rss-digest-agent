@@ -4,6 +4,7 @@ import time
 import re
 import smtplib
 import sqlite3
+import html as html_lib
 import feedparser
 import requests
 import yaml
@@ -18,6 +19,7 @@ load_dotenv()
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 CACHE_DB = "digest_cache.db"
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def init_cache(db_path=None):
@@ -88,7 +90,8 @@ def scrape_article(url, max_chars=2000, timeout=10):
         )
 
         return text[:max_chars] if text else None
-    except Exception:
+    except Exception as e:
+        print(f"  Warning: Could not scrape {url}: {type(e).__name__}")
         return None
 
 
@@ -97,9 +100,18 @@ def load_config(path=None):
     over config.yaml (version-controlled template) when no path is given.
     """
     if path is None:
-        path = "config.local.yaml" if os.path.exists("config.local.yaml") else "config.yaml"
+        local = os.path.join(_BASE_DIR, "config.local.yaml")
+        path = local if os.path.exists(local) else os.path.join(_BASE_DIR, "config.yaml")
     with open(path) as f:
         return yaml.safe_load(f)
+
+
+def validate_config(config):
+    """Raise ValueError early if required config keys are missing or empty."""
+    if not config.get("feeds"):
+        raise ValueError("Config error: 'feeds' key is missing or empty — add at least one RSS feed URL")
+    if "users" not in config and "topics" not in config:
+        raise ValueError("Config error: must have either 'users' or 'topics' key")
 
 
 def group_name_to_env_key(name):
@@ -286,8 +298,8 @@ def analyze_sentiment(articles):
             content = article.get("bullets", article["summary"])[:300]
             articles_text += f"[{j}] Title: {article['title']}\nContent: {content}\n\n"
 
-        prompt = f"""Analyze the sentiment of each article for a finance and technology professional audience.
-Classify each as Positive, Negative, or Neutral based on the implications for the industry.
+        prompt = f"""Analyze the sentiment of each article.
+Classify each as Positive, Negative, or Neutral based on its implications for the intended audience.
 Return ONLY a valid JSON array (no extra text):
 [{{"id": 1, "sentiment": "Positive"}}, {{"id": 2, "sentiment": "Negative"}}, ...]
 
@@ -350,9 +362,11 @@ def compile_digest(articles, topics):
             if sentiment:
                 color = sentiment_colors.get(sentiment, "#6c757d")
                 sentiment_html = f' &nbsp;·&nbsp; <span style="color: {color}; font-weight: bold;">&#9679; {sentiment}</span>'
+            safe_title = html_lib.escape(article['title'])
+            safe_link = article['link'] if not article['link'].lower().startswith("javascript:") else "#"
             html += f"""  <div style="margin: 20px 0; padding: 18px; border-left: 4px solid {bar_color}; background: #f8f9fa; border-radius: 0 6px 6px 0;">
     <h3 style="margin: 0 0 6px 0; font-size: 16px; line-height: 1.4;">
-      <a href="{article['link']}" style="color: #1a1a2e; text-decoration: none;">{article['title']}</a>
+      <a href="{safe_link}" style="color: #1a1a2e; text-decoration: none;">{safe_title}</a>
     </h3>
     <p style="color: #999; font-size: 12px; margin: 0 0 10px 0;">
       {article['source']} &nbsp;·&nbsp; {article['published']} &nbsp;·&nbsp; Relevance: {score}/10{sentiment_html}
@@ -393,12 +407,14 @@ def send_email(html_content, subject, from_email, to_email, app_password):
 
 def main():
     config = load_config()
+    validate_config(config)
     init_cache()
     purge_expired(days=config.get("cache", {}).get("expiry_days", 7))
 
     # Shared: fetch once for all users
     print("Step 1: Fetching articles from RSS feeds...")
-    articles = fetch_articles(config["feeds"])
+    fetch_cfg = config.get("fetch", {})
+    articles = fetch_articles(config.get("feeds", []), hours=fetch_cfg.get("lookback_hours", 24))
     articles = list({a["link"]: a for a in articles}.values())
     print(f"  Found {len(articles)} unique articles")
 
@@ -415,6 +431,9 @@ def main():
         name, topics = user["name"], user["topics"]
         to_email = ",".join(user["emails"])
         print(f"\n── User group: {name} ────────────────────────")
+        if not to_email:
+            print(f"  Warning: No recipients configured for '{name}' (check env var {group_name_to_env_key(name)}) — skipping")
+            continue
 
         relevant = filter_relevant_articles(fresh, topics)
         print(f"  Found {len(relevant)} relevant articles")
@@ -442,14 +461,17 @@ def main():
             summarized = analyze_sentiment(summarized)
 
         html = compile_digest(summarized, topics)
-        send_email(
-            html_content=html,
-            subject=f"AI Research Digest ({name}) - {today}",
-            from_email=os.getenv("GMAIL_FROM"),
-            to_email=to_email,
-            app_password=os.getenv("GMAIL_APP_PASSWORD"),
-        )
-        print(f"  Digest sent to {to_email} ({name})")
+        try:
+            send_email(
+                html_content=html,
+                subject=f"AI Research Digest ({name}) - {today}",
+                from_email=os.getenv("GMAIL_FROM"),
+                to_email=to_email,
+                app_password=os.getenv("GMAIL_APP_PASSWORD"),
+            )
+            print(f"  Digest sent to {to_email} ({name})")
+        except Exception as e:
+            print(f"  Warning: Failed to send email to {to_email} ({name}): {e}")
 
     # Cache after all users processed
     add_to_cache([a["link"] for a in fresh])

@@ -35,7 +35,7 @@ rss-digest-agent/
 ├── Dockerfile            # Docker container definition
 ├── requirements.txt      # Python dependencies
 ├── main.py               # Main agent logic
-├── test_main.py          # Unit tests (83 tests)
+├── test_main.py          # Unit tests (99 tests)
 └── README.md
 ```
 
@@ -175,6 +175,19 @@ This runs the agent every day at 8:00 AM and logs output to `/tmp/digest.log`.
 
 ---
 
+## Configuring the Lookback Window
+
+By default, the agent fetches articles published within the last **24 hours**. You can change this in `config.yaml`:
+
+```yaml
+fetch:
+  lookback_hours: 24   # increase for longer windows (e.g. 48 for weekends)
+```
+
+Set a longer window (e.g. `48`) to catch articles you may have missed, or a shorter one for high-volume feeds.
+
+---
+
 ## Adding More RSS Feeds
 
 Edit `config.yaml` and add feed URLs under `feeds:`:
@@ -190,7 +203,7 @@ To find the RSS feed URL for any website, look for an RSS icon or append `/feed`
 
 ## Sentiment Analysis
 
-When enabled, each article in the digest is classified as **Positive**, **Negative**, or **Neutral** based on its implications for finance and technology professionals. The sentiment label appears colour-coded in the email next to the relevance score.
+When enabled, each article in the digest is classified as **Positive**, **Negative**, or **Neutral** based on its implications for the intended audience. The sentiment label appears colour-coded in the email next to the relevance score.
 
 Configure in `config.yaml`:
 
@@ -253,7 +266,7 @@ scraping:
 ```
 
 - Scraping runs **after** AI filtering — only relevant articles are scraped
-- If a site blocks scraping or times out, the agent silently falls back to the RSS excerpt
+- If a site blocks scraping or times out, the agent prints a warning and falls back to the RSS excerpt
 - Set `enabled: false` for faster runs or if you hit many paywalled sources
 
 ---
