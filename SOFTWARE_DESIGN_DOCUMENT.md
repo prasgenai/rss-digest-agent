@@ -3,7 +3,7 @@
 
 | Field         | Details                          |
 |---------------|----------------------------------|
-| Document Ver  | 1.7.1                            |
+| Document Ver  | 1.8                              |
 | Date          | February 2026                    |
 | Author        | Prashant                         |
 | Status        | Released                         |
@@ -193,8 +193,9 @@ User clicks links to read full articles of interest
 
  CONFIG LAYER
  ─────────────
- config.yaml  ──► topics, feed URLs (no email addresses)
- .env         ──► API keys, sender credentials, per-group recipient emails
+ config.local.yaml  ──► user's actual topics, feeds, user groups (gitignored)
+ config.yaml        ──► version-controlled template / fallback
+ .env               ──► API keys, sender credentials, per-group recipient emails
 ```
 
 ### Component Interaction
@@ -432,7 +433,7 @@ All dependencies are **open source**. No proprietary libraries.
 ## 7. Component Design
 
 ### `load_config(path)`
-- **Input:** Path to YAML file (default: `config.yaml`)
+- **Input:** Optional path to YAML file. If omitted, loads `config.local.yaml` if it exists, otherwise falls back to `config.yaml`
 - **Output:** Dict with `feeds`, `topics` (fallback), and optionally `users`
 - **Error handling:** Raises exception if file not found
 
@@ -503,7 +504,7 @@ All dependencies are **open source**. No proprietary libraries.
 }
 ```
 
-### Config Schema (`config.yaml`)
+### Config Schema (`config.yaml` / `config.local.yaml`)
 
 ```yaml
 # Multi-user mode (optional — takes precedence over 'topics' when present)
@@ -637,6 +638,7 @@ Edit `config.yaml` — no code changes needed. The agent picks up changes on the
 | Security: emails to .env | Move per-group recipient emails from config.yaml to .env to prevent PII in version control | ✅ Done (v1.6.1) |
 | Topic-aware summarization | summarize_articles() now accepts topics; prompt tailored per user group; full scraped content used (no 400-char truncation) | ✅ Done (v1.7) |
 | Proprietary license | Replace CC BY-NC-ND 4.0 (incompatible with software) with a proprietary All Rights Reserved license | ✅ Done (v1.7.1) |
+| config.local.yaml override | Gitignored local config file lets users change topics/feeds/groups freely without touching version-controlled config.yaml | ✅ Done (v1.8) |
 
 ### Potential Future Enhancements
 
@@ -651,5 +653,5 @@ Edit `config.yaml` — no code changes needed. The agent picks up changes on the
 
 ---
 
-*Document generated for RSS Research Digest Agent v1.7.1*
+*Document generated for RSS Research Digest Agent v1.8*
 *All technologies used are open source.*
