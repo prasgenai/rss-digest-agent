@@ -211,21 +211,23 @@ Score 1-10 (7+ = relevant). Articles:
     return relevant[:12]  # Cap at 12 articles per digest
 
 
-def summarize_articles(articles):
+def summarize_articles(articles, topics):
     """Summarize each relevant article into 3 bullet points (batched)."""
     if not articles:
         return []
 
     batch_size = 5
+    topics_str = "\n".join(f"- {t}" for t in topics)
 
     for i in range(0, len(articles), batch_size):
         batch = articles[i:i + batch_size]
         articles_text = ""
         for j, article in enumerate(batch, 1):
-            articles_text += f"[{j}] Title: {article['title']}\nContent: {article['summary'][:400]}\n\n"
+            articles_text += f"[{j}] Title: {article['title']}\nContent: {article['summary']}\n\n"
 
         prompt = f"""Summarize each article in exactly 3 concise bullet points.
-Focus on practical insights for finance and technology professionals.
+Focus on insights relevant to these topics:
+{topics_str}
 
 {articles_text}
 Format EXACTLY as (no extra text before [1]):
@@ -428,7 +430,7 @@ def main():
                     scraped_count += 1
             print(f"  Scraped {scraped_count} new articles")
 
-        summarized = summarize_articles(relevant)
+        summarized = summarize_articles(relevant, topics)
 
         if sentiment_cfg.get("enabled", True):
             print("  Analyzing article sentiment...")

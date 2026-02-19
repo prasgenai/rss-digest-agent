@@ -245,8 +245,10 @@ class TestFilterRelevantArticles(unittest.TestCase):
 
 class TestSummarizeArticles(unittest.TestCase):
 
+    TOPICS = ["AI in Finance", "AI for Software Development"]
+
     def test_returns_empty_for_no_articles(self):
-        result = summarize_articles([])
+        result = summarize_articles([], self.TOPICS)
         self.assertEqual(result, [])
 
     @patch("main.time.sleep")
@@ -256,7 +258,7 @@ class TestSummarizeArticles(unittest.TestCase):
             "[1]\n• AI helps banks detect fraud faster\n• Risk scores improve 40%\n• Compliance costs reduced"
         )
         articles = [make_article()]
-        result = summarize_articles(articles)
+        result = summarize_articles(articles, self.TOPICS)
         self.assertIn("bullets", result[0])
         self.assertIn("•", result[0]["bullets"])
 
@@ -265,7 +267,7 @@ class TestSummarizeArticles(unittest.TestCase):
     def test_fallback_on_groq_error(self, mock_client, mock_sleep):
         mock_client.chat.completions.create.side_effect = Exception("API error")
         articles = [make_article()]
-        result = summarize_articles(articles)
+        result = summarize_articles(articles, self.TOPICS)
         # Should fall back to raw summary snippet
         self.assertIn("bullets", result[0])
         self.assertTrue(result[0]["bullets"].startswith("•"))
@@ -277,9 +279,35 @@ class TestSummarizeArticles(unittest.TestCase):
             "[1]\n• Point A\n• Point B\n• Point C\n[2]\n• Point D\n• Point E\n• Point F"
         )
         articles = [make_article("Article 1"), make_article("Article 2")]
-        result = summarize_articles(articles)
+        result = summarize_articles(articles, self.TOPICS)
         for article in result:
             self.assertIn("bullets", article)
+
+    @patch("main.time.sleep")
+    @patch("main.client")
+    def test_topics_included_in_prompt(self, mock_client, mock_sleep):
+        mock_client.chat.completions.create.return_value = make_groq_response(
+            "[1]\n• Point A\n• Point B\n• Point C"
+        )
+        topics = ["Singapore Scholarships", "A-Level Students"]
+        articles = [make_article()]
+        summarize_articles(articles, topics)
+        prompt = mock_client.chat.completions.create.call_args[1]["messages"][0]["content"]
+        self.assertIn("Singapore Scholarships", prompt)
+        self.assertIn("A-Level Students", prompt)
+
+    @patch("main.time.sleep")
+    @patch("main.client")
+    def test_full_summary_used_not_truncated(self, mock_client, mock_sleep):
+        mock_client.chat.completions.create.return_value = make_groq_response(
+            "[1]\n• Point A\n• Point B\n• Point C"
+        )
+        long_summary = "X" * 1000
+        article = make_article()
+        article["summary"] = long_summary
+        summarize_articles([article], self.TOPICS)
+        prompt = mock_client.chat.completions.create.call_args[1]["messages"][0]["content"]
+        self.assertIn(long_summary, prompt)
 
 
 # ---------------------------------------------------------------------------
@@ -796,7 +824,7 @@ class TestMainMultiUser(unittest.TestCase):
     @patch("main.init_cache")
     @patch("main.send_email")
     @patch("main.compile_digest", return_value="<html></html>")
-    @patch("main.summarize_articles", side_effect=lambda x: x)
+    @patch("main.summarize_articles", side_effect=lambda x, t: x)
     @patch("main.filter_relevant_articles", return_value=[])
     @patch("main.fetch_articles", return_value=[])
     @patch("main.load_config")
@@ -814,7 +842,7 @@ class TestMainMultiUser(unittest.TestCase):
     @patch("main.init_cache")
     @patch("main.send_email")
     @patch("main.compile_digest", return_value="<html></html>")
-    @patch("main.summarize_articles", side_effect=lambda x: x)
+    @patch("main.summarize_articles", side_effect=lambda x, t: x)
     @patch("main.filter_relevant_articles", return_value=[])
     @patch("main.fetch_articles", return_value=[])
     @patch("main.load_config")
@@ -834,7 +862,7 @@ class TestMainMultiUser(unittest.TestCase):
     @patch("main.init_cache")
     @patch("main.send_email")
     @patch("main.compile_digest", return_value="<html></html>")
-    @patch("main.summarize_articles", side_effect=lambda x: x)
+    @patch("main.summarize_articles", side_effect=lambda x, t: x)
     @patch("main.filter_relevant_articles", return_value=[])
     @patch("main.fetch_articles", return_value=[])
     @patch("main.load_config")
@@ -852,7 +880,7 @@ class TestMainMultiUser(unittest.TestCase):
     @patch("main.init_cache")
     @patch("main.send_email")
     @patch("main.compile_digest", return_value="<html></html>")
-    @patch("main.summarize_articles", side_effect=lambda x: x)
+    @patch("main.summarize_articles", side_effect=lambda x, t: x)
     @patch("main.filter_relevant_articles", return_value=[])
     @patch("main.fetch_articles", return_value=[])
     @patch("main.load_config")
@@ -870,7 +898,7 @@ class TestMainMultiUser(unittest.TestCase):
     @patch("main.init_cache")
     @patch("main.send_email")
     @patch("main.compile_digest", return_value="<html></html>")
-    @patch("main.summarize_articles", side_effect=lambda x: x)
+    @patch("main.summarize_articles", side_effect=lambda x, t: x)
     @patch("main.scrape_article", return_value="scraped content")
     @patch("main.filter_relevant_articles")
     @patch("main.fetch_articles")
@@ -901,7 +929,7 @@ class TestMainMultiUser(unittest.TestCase):
     @patch("main.init_cache")
     @patch("main.send_email")
     @patch("main.compile_digest", return_value="<html></html>")
-    @patch("main.summarize_articles", side_effect=lambda x: x)
+    @patch("main.summarize_articles", side_effect=lambda x, t: x)
     @patch("main.filter_relevant_articles", return_value=[])
     @patch("main.fetch_articles")
     @patch("main.load_config")
@@ -926,7 +954,7 @@ class TestMainMultiUser(unittest.TestCase):
     @patch("main.init_cache")
     @patch("main.send_email")
     @patch("main.compile_digest", return_value="<html></html>")
-    @patch("main.summarize_articles", side_effect=lambda x: x)
+    @patch("main.summarize_articles", side_effect=lambda x, t: x)
     @patch("main.scrape_article")
     @patch("main.filter_relevant_articles", return_value=[])
     @patch("main.fetch_articles", return_value=[])
@@ -949,7 +977,7 @@ class TestMainMultiUser(unittest.TestCase):
     @patch("main.send_email")
     @patch("main.compile_digest", return_value="<html></html>")
     @patch("main.analyze_sentiment", side_effect=lambda x: x)
-    @patch("main.summarize_articles", side_effect=lambda x: x)
+    @patch("main.summarize_articles", side_effect=lambda x, t: x)
     @patch("main.filter_relevant_articles", return_value=[])
     @patch("main.fetch_articles", return_value=[])
     @patch("main.load_config")
@@ -972,7 +1000,7 @@ class TestMainMultiUser(unittest.TestCase):
     @patch("main.send_email")
     @patch("main.compile_digest", return_value="<html></html>")
     @patch("main.analyze_sentiment")
-    @patch("main.summarize_articles", side_effect=lambda x: x)
+    @patch("main.summarize_articles", side_effect=lambda x, t: x)
     @patch("main.filter_relevant_articles", return_value=[])
     @patch("main.fetch_articles", return_value=[])
     @patch("main.load_config")
@@ -993,7 +1021,7 @@ class TestMainMultiUser(unittest.TestCase):
     @patch("main.init_cache")
     @patch("main.send_email")
     @patch("main.compile_digest", return_value="<html></html>")
-    @patch("main.summarize_articles", side_effect=lambda x: x)
+    @patch("main.summarize_articles", side_effect=lambda x, t: x)
     @patch("main.filter_relevant_articles", return_value=[])
     @patch("main.fetch_articles", return_value=[])
     @patch("main.load_config")
