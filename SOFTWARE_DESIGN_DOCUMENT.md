@@ -3,7 +3,7 @@
 
 | Field         | Details                          |
 |---------------|----------------------------------|
-| Document Ver  | 1.6.1                            |
+| Document Ver  | 1.7                              |
 | Date          | February 2026                    |
 | Author        | Prashant                         |
 | Status        | Released                         |
@@ -635,6 +635,7 @@ Edit `config.yaml` — no code changes needed. The agent picks up changes on the
 | Multi-user personalized digests | Each user group gets its own topics, recipients, and digest email; shared fetch phase | ✅ Done (v1.5) |
 | Sentiment analysis | Each article classified as Positive/Negative/Neutral; colour-coded badge in email digest | ✅ Done (v1.6) |
 | Security: emails to .env | Move per-group recipient emails from config.yaml to .env to prevent PII in version control | ✅ Done (v1.6.1) |
+| Topic-aware summarization | summarize_articles() now accepts topics; prompt tailored per user group; full scraped content used (no 400-char truncation) | ✅ Done (v1.7) |
 
 ### Potential Future Enhancements
 
@@ -649,5 +650,5 @@ Edit `config.yaml` — no code changes needed. The agent picks up changes on the
 
 ---
 
-*Document generated for RSS Research Digest Agent v1.6.1*
+*Document generated for RSS Research Digest Agent v1.7*
 *All technologies used are open source.*
