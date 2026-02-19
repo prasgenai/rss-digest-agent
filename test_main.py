@@ -13,6 +13,7 @@ os.environ.setdefault("GMAIL_APP_PASSWORD", "testpassword")
 
 from main import (
     load_config,
+    validate_config,
     fetch_articles,
     filter_relevant_articles,
     summarize_articles,
@@ -83,7 +84,7 @@ class TestLoadConfig(unittest.TestCase):
         yaml_content = "topics:\n  - Local Topic\nfeeds:\n  - https://local.example.com/rss\n"
         with patch("builtins.open", mock_open(read_data=yaml_content)):
             config = load_config()
-        mock_exists.assert_called_once_with("config.local.yaml")
+        self.assertTrue(mock_exists.call_args[0][0].endswith("config.local.yaml"))
         self.assertEqual(config["topics"], ["Local Topic"])
 
     @patch("main.os.path.exists", return_value=False)
@@ -91,7 +92,7 @@ class TestLoadConfig(unittest.TestCase):
         yaml_content = "topics:\n  - Default Topic\nfeeds:\n  - https://example.com/rss\n"
         with patch("builtins.open", mock_open(read_data=yaml_content)):
             config = load_config()
-        mock_exists.assert_called_once_with("config.local.yaml")
+        self.assertTrue(mock_exists.call_args[0][0].endswith("config.local.yaml"))
         self.assertEqual(config["topics"], ["Default Topic"])
 
 
@@ -1048,6 +1049,329 @@ class TestMainMultiUser(unittest.TestCase):
         mock_load.return_value = self._make_config_single_user()
         main()
         mock_send.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# 12. validate_config (Bug 5)
+# ---------------------------------------------------------------------------
+
+class TestValidateConfig(unittest.TestCase):
+
+    def test_validate_config_raises_on_missing_feeds(self):
+        config = {"users": [{"name": "A", "topics": ["T"]}]}
+        with self.assertRaises(ValueError) as ctx:
+            validate_config(config)
+        self.assertIn("feeds", str(ctx.exception))
+
+    def test_validate_config_raises_on_empty_feeds(self):
+        config = {"feeds": [], "users": [{"name": "A", "topics": ["T"]}]}
+        with self.assertRaises(ValueError) as ctx:
+            validate_config(config)
+        self.assertIn("feeds", str(ctx.exception))
+
+    def test_validate_config_raises_on_missing_topics_and_users(self):
+        config = {"feeds": ["https://example.com/rss"]}
+        with self.assertRaises(ValueError) as ctx:
+            validate_config(config)
+        self.assertIn("users", str(ctx.exception))
+
+    def test_validate_config_passes_with_users_key(self):
+        config = {
+            "feeds": ["https://example.com/rss"],
+            "users": [{"name": "A", "topics": ["T"]}],
+        }
+        # Should not raise
+        validate_config(config)
+
+    def test_validate_config_passes_with_topics_key(self):
+        config = {
+            "feeds": ["https://example.com/rss"],
+            "topics": ["AI in Finance"],
+        }
+        # Should not raise
+        validate_config(config)
+
+
+# ---------------------------------------------------------------------------
+# 13. Bug 1 [HIGH] — send_email failure does not skip remaining groups
+# ---------------------------------------------------------------------------
+
+class TestSendEmailFailureHandling(unittest.TestCase):
+
+    def _make_config_multi_user(self):
+        return {
+            "feeds": ["https://example.com/rss"],
+            "cache": {"expiry_days": 7},
+            "scraping": {"enabled": False},
+            "sentiment": {"enabled": False},
+            "users": [
+                {"name": "Finance Team", "topics": ["Finance AI"]},
+                {"name": "Technology Team", "topics": ["Dev AI"]},
+            ],
+        }
+
+    _multi_user_emails = {
+        "FINANCE_TEAM_EMAILS": "finance@gmail.com",
+        "TECHNOLOGY_TEAM_EMAILS": "tech@gmail.com",
+    }
+
+    @patch("main.add_to_cache")
+    @patch("main.is_cached", return_value=False)
+    @patch("main.purge_expired")
+    @patch("main.init_cache")
+    @patch("main.compile_digest", return_value="<html></html>")
+    @patch("main.summarize_articles", side_effect=lambda x, t: x)
+    @patch("main.filter_relevant_articles", return_value=[])
+    @patch("main.fetch_articles", return_value=[])
+    @patch("main.load_config")
+    def test_send_email_failure_does_not_skip_remaining_groups(
+        self, mock_load, mock_fetch, mock_filter, mock_summarize,
+        mock_compile, mock_init, mock_purge, mock_cached, mock_cache
+    ):
+        """First group's send_email raises; second group must still be processed."""
+        call_count = {"n": 0}
+
+        def send_side_effect(**kwargs):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                raise smtplib.SMTPException("Connection refused")
+
+        mock_load.return_value = self._make_config_multi_user()
+        with patch.dict(os.environ, self._multi_user_emails):
+            with patch("main.send_email", side_effect=send_side_effect):
+                main()  # must not raise
+
+        self.assertEqual(call_count["n"], 2)
+
+    @patch("main.add_to_cache")
+    @patch("main.is_cached", return_value=False)
+    @patch("main.purge_expired")
+    @patch("main.init_cache")
+    @patch("main.compile_digest", return_value="<html></html>")
+    @patch("main.summarize_articles", side_effect=lambda x, t: x)
+    @patch("main.filter_relevant_articles", return_value=[])
+    @patch("main.fetch_articles", return_value=[])
+    @patch("main.load_config")
+    def test_add_to_cache_called_even_when_send_email_raises(
+        self, mock_load, mock_fetch, mock_filter, mock_summarize,
+        mock_compile, mock_init, mock_purge, mock_cached, mock_cache
+    ):
+        """Cache must be populated even if all send_email calls fail."""
+        mock_load.return_value = self._make_config_multi_user()
+        with patch.dict(os.environ, self._multi_user_emails):
+            with patch("main.send_email", side_effect=Exception("SMTP down")):
+                main()
+
+        mock_cache.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# 14. Bug 2 [MEDIUM] — empty recipients guard
+# ---------------------------------------------------------------------------
+
+class TestEmptyRecipientsGuard(unittest.TestCase):
+
+    def _make_config_no_emails(self):
+        return {
+            "feeds": ["https://example.com/rss"],
+            "cache": {"expiry_days": 7},
+            "scraping": {"enabled": False},
+            "sentiment": {"enabled": False},
+            "users": [
+                {"name": "Ghost Group", "topics": ["AI"]},
+            ],
+        }
+
+    @patch("main.add_to_cache")
+    @patch("main.is_cached", return_value=False)
+    @patch("main.purge_expired")
+    @patch("main.init_cache")
+    @patch("main.send_email")
+    @patch("main.compile_digest", return_value="<html></html>")
+    @patch("main.summarize_articles", side_effect=lambda x, t: x)
+    @patch("main.filter_relevant_articles", return_value=[])
+    @patch("main.fetch_articles", return_value=[])
+    @patch("main.load_config")
+    def test_empty_emails_group_is_skipped(
+        self, mock_load, mock_fetch, mock_filter, mock_summarize,
+        mock_compile, mock_send, mock_init, mock_purge, mock_cached, mock_cache
+    ):
+        """send_email must NOT be called when no recipients are configured."""
+        mock_load.return_value = self._make_config_no_emails()
+        # Ensure no env var for this group
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("GHOST_GROUP_EMAILS", None)
+            main()
+        mock_send.assert_not_called()
+
+    @patch("main.add_to_cache")
+    @patch("main.is_cached", return_value=False)
+    @patch("main.purge_expired")
+    @patch("main.init_cache")
+    @patch("main.send_email")
+    @patch("main.compile_digest", return_value="<html></html>")
+    @patch("main.summarize_articles", side_effect=lambda x, t: x)
+    @patch("main.filter_relevant_articles", return_value=[])
+    @patch("main.fetch_articles", return_value=[])
+    @patch("main.load_config")
+    def test_empty_emails_prints_warning(
+        self, mock_load, mock_fetch, mock_filter, mock_summarize,
+        mock_compile, mock_send, mock_init, mock_purge, mock_cached, mock_cache
+    ):
+        """A warning must be printed when a group has no recipients."""
+        mock_load.return_value = self._make_config_no_emails()
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("GHOST_GROUP_EMAILS", None)
+            with patch("builtins.print") as mock_print:
+                main()
+        printed = " ".join(str(c) for c in mock_print.call_args_list)
+        self.assertIn("Warning", printed)
+        self.assertIn("Ghost Group", printed)
+
+
+# ---------------------------------------------------------------------------
+# 15. Bug 3 [MEDIUM] — missing feeds key does not crash
+# ---------------------------------------------------------------------------
+
+class TestMissingFeedsKey(unittest.TestCase):
+
+    @patch("main.add_to_cache")
+    @patch("main.is_cached", return_value=False)
+    @patch("main.purge_expired")
+    @patch("main.init_cache")
+    @patch("main.send_email")
+    @patch("main.compile_digest", return_value="<html></html>")
+    @patch("main.summarize_articles", side_effect=lambda x, t: x)
+    @patch("main.filter_relevant_articles", return_value=[])
+    @patch("main.fetch_articles", return_value=[])
+    @patch("main.load_config")
+    @patch("main.validate_config")  # bypass validation so we test fetch path
+    def test_missing_feeds_key_does_not_crash(
+        self, mock_validate, mock_load, mock_fetch, mock_filter, mock_summarize,
+        mock_compile, mock_send, mock_init, mock_purge, mock_cached, mock_cache
+    ):
+        """fetch_articles should be called with [] when feeds key is absent."""
+        mock_load.return_value = {
+            "cache": {"expiry_days": 7},
+            "scraping": {"enabled": False},
+            "sentiment": {"enabled": False},
+            "topics": ["AI"],
+        }
+        with patch.dict(os.environ, {"GMAIL_TO": "test@gmail.com"}):
+            main()
+        mock_fetch.assert_called_once_with([], hours=24)
+
+
+# ---------------------------------------------------------------------------
+# 16. Bug 6 [LOW] — scrape_article prints warning on failure
+# ---------------------------------------------------------------------------
+
+class TestScrapeArticleWarning(unittest.TestCase):
+
+    @patch("main.requests.get", side_effect=ConnectionError("Timeout"))
+    def test_scrape_failure_prints_warning(self, mock_get):
+        with patch("builtins.print") as mock_print:
+            result = scrape_article("https://example.com/article")
+        self.assertIsNone(result)
+        printed = " ".join(str(c) for c in mock_print.call_args_list)
+        self.assertIn("Warning", printed)
+        self.assertIn("ConnectionError", printed)
+
+
+# ---------------------------------------------------------------------------
+# 17. Bug 7 [LOW] — sentiment prompt does not hardcode finance/technology
+# ---------------------------------------------------------------------------
+
+class TestSentimentPromptGeneric(unittest.TestCase):
+
+    @patch("main.time.sleep")
+    @patch("main.client")
+    def test_sentiment_prompt_does_not_hardcode_finance_technology(self, mock_client, mock_sleep):
+        mock_client.chat.completions.create.return_value = make_groq_response(
+            '[{"id": 1, "sentiment": "Neutral"}]'
+        )
+        articles = [make_article(with_bullets=True)]
+        analyze_sentiment(articles)
+        prompt = mock_client.chat.completions.create.call_args[1]["messages"][0]["content"]
+        self.assertNotIn("finance and technology", prompt.lower())
+
+
+# ---------------------------------------------------------------------------
+# 18. Bug 8 [LOW] — HTML escaping in compile_digest
+# ---------------------------------------------------------------------------
+
+class TestCompileDigestHtmlEscaping(unittest.TestCase):
+
+    def test_html_special_chars_in_title_are_escaped(self):
+        article = make_article(title='<script>alert("xss")</script>', with_bullets=True)
+        html = compile_digest([article], ["AI"])
+        self.assertNotIn("<script>", html)
+        self.assertIn("&lt;script&gt;", html)
+
+    def test_javascript_uri_in_link_is_sanitized(self):
+        article = make_article(with_bullets=True)
+        article["link"] = "javascript:alert('xss')"
+        html = compile_digest([article], ["AI"])
+        self.assertNotIn("javascript:", html)
+        self.assertIn('href="#"', html)
+
+
+# ---------------------------------------------------------------------------
+# 19. Bug 9 [LOW] — configurable lookback_hours
+# ---------------------------------------------------------------------------
+
+class TestConfigurableLookbackHours(unittest.TestCase):
+
+    @patch("main.add_to_cache")
+    @patch("main.is_cached", return_value=False)
+    @patch("main.purge_expired")
+    @patch("main.init_cache")
+    @patch("main.send_email")
+    @patch("main.compile_digest", return_value="<html></html>")
+    @patch("main.summarize_articles", side_effect=lambda x, t: x)
+    @patch("main.filter_relevant_articles", return_value=[])
+    @patch("main.fetch_articles", return_value=[])
+    @patch("main.load_config")
+    def test_fetch_articles_uses_lookback_hours_from_config(
+        self, mock_load, mock_fetch, mock_filter, mock_summarize,
+        mock_compile, mock_send, mock_init, mock_purge, mock_cached, mock_cache
+    ):
+        mock_load.return_value = {
+            "feeds": ["https://example.com/rss"],
+            "fetch": {"lookback_hours": 48},
+            "cache": {"expiry_days": 7},
+            "scraping": {"enabled": False},
+            "sentiment": {"enabled": False},
+            "topics": ["AI"],
+        }
+        with patch.dict(os.environ, {"GMAIL_TO": "test@gmail.com"}):
+            main()
+        mock_fetch.assert_called_once_with(["https://example.com/rss"], hours=48)
+
+    @patch("main.add_to_cache")
+    @patch("main.is_cached", return_value=False)
+    @patch("main.purge_expired")
+    @patch("main.init_cache")
+    @patch("main.send_email")
+    @patch("main.compile_digest", return_value="<html></html>")
+    @patch("main.summarize_articles", side_effect=lambda x, t: x)
+    @patch("main.filter_relevant_articles", return_value=[])
+    @patch("main.fetch_articles", return_value=[])
+    @patch("main.load_config")
+    def test_fetch_articles_defaults_to_24_hours_when_not_in_config(
+        self, mock_load, mock_fetch, mock_filter, mock_summarize,
+        mock_compile, mock_send, mock_init, mock_purge, mock_cached, mock_cache
+    ):
+        mock_load.return_value = {
+            "feeds": ["https://example.com/rss"],
+            "cache": {"expiry_days": 7},
+            "scraping": {"enabled": False},
+            "sentiment": {"enabled": False},
+            "topics": ["AI"],
+        }
+        with patch.dict(os.environ, {"GMAIL_TO": "test@gmail.com"}):
+            main()
+        mock_fetch.assert_called_once_with(["https://example.com/rss"], hours=24)
 
 
 # ---------------------------------------------------------------------------

@@ -32,6 +32,10 @@ topics:
   - AI use cases for Finance Department in a bank
   - AI and Claude for software development
 
+# ── Fetch ────────────────────────────────────────────────────────────────────
+fetch:
+  lookback_hours: 24  # only include articles published within this many hours
+
 # ── Cache ────────────────────────────────────────────────────────────────────
 cache:
   expiry_days: 7  # articles seen within this many days will not be reprocessed
