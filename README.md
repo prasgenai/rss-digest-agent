@@ -1,6 +1,6 @@
 # RSS Research Digest Agent
 
-[![License: CC BY-NC-ND 4.0](https://img.shields.io/badge/License-CC%20BY--NC--ND%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-nd/4.0/)
+[![License: Proprietary](https://img.shields.io/badge/License-Proprietary-red.svg)](./LICENSE)
 [![Built with Claude Code](https://img.shields.io/badge/Built%20with-Claude%20Code-orange?logo=anthropic)](https://claude.ai/claude-code)
 
 An agentic app that fetches articles from RSS feeds, filters them by topic using AI, summarizes them into bullet points, and emails you a daily digest.
@@ -277,11 +277,11 @@ rm digest_cache.db
 
 ## License
 
-Copyright (c) 2026 Prashant. All rights reserved.
+Copyright (c) 2026 Prashant. All Rights Reserved.
 
-This project is licensed under the [Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International License (CC BY-NC-ND 4.0)](https://creativecommons.org/licenses/by-nc-nd/4.0/).
+This project uses a **proprietary license**. You may view and read the source code for personal or educational purposes. Copying, modifying, distributing, or using this software commercially requires explicit written consent from the author.
 
-You may view and share this code with attribution. You may **not** use it commercially or distribute modified versions.
+See the [LICENSE](./LICENSE) file for full terms.
 
 ---
 
